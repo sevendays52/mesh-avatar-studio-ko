@@ -51,6 +51,16 @@ This creates `projects/<name>/` with `source.png` and an empty `rig.draft.json` 
 image size filled in. Field meanings are in `docs/rig-fields.md`; `samples/miko-qipao/rig.json`
 is a complete example.
 
+If Studio's **New project** screen has already saved `projects/<name>/source.png`, continue
+in that same folder. Initialize only when no draft, completed rig, layers or variants exist:
+
+```sh
+uv run tools/new-project.py projects/<name>/source.png <name> --in-place
+```
+
+This preserves the source image and existing avatar metadata. If a draft or rig already
+exists, continue reviewing it instead of reinitializing or using `--force`.
+
 ## Step 2 — Survey the image
 
 ```sh

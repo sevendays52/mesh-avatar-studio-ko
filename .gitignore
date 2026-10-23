@@ -9,4 +9,6 @@ playwright-report/
 __pycache__/
 projects/
 work/
+MeshAvatarStudio.exe
+tools/launcher-runtime/
 samples/**/review/

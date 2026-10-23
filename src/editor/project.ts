@@ -73,6 +73,33 @@ export async function copySample(rig: Rig): Promise<LocalProject> {
   if (!response.ok) throw new Error('Could not copy the sample.');
   return response.json();
 }
+export class CreateImageProjectError extends Error {}
+export async function createImageProject(name: string, file: File): Promise<LocalProject> {
+  if (!file.size || file.size > 24 * 1024 * 1024 || !/\.(png|jpe?g|webp)$/i.test(file.name)) throw new CreateImageProjectError('invalidImage');
+  let bitmap: ImageBitmap;
+  try { bitmap = await createImageBitmap(file); } catch { throw new CreateImageProjectError('invalidImage'); }
+  let blob: Blob;
+  try {
+    if (bitmap.width > 8192 || bitmap.height > 8192 || bitmap.width * bitmap.height > 16_777_216) throw new CreateImageProjectError('imageTooLarge');
+    const signature = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+    if ([137, 80, 78, 71, 13, 10, 26, 10].every((byte, i) => signature[i] === byte)) blob = file;
+    else {
+      const canvas = document.createElement('canvas'); canvas.width = bitmap.width; canvas.height = bitmap.height;
+      const context = canvas.getContext('2d');
+      if (!context) throw new CreateImageProjectError('invalidImage');
+      context.drawImage(bitmap, 0, 0);
+      blob = await new Promise<Blob>((done, reject) => canvas.toBlob(value => value ? done(value) : reject(new CreateImageProjectError('invalidImage')), 'image/png'));
+    }
+  } finally { bitmap.close(); }
+  if (blob.size > 24 * 1024 * 1024) throw new CreateImageProjectError('invalidImage');
+  const image = await new Promise<string>((done, reject) => {
+    const reader = new FileReader(); reader.onload = () => done(String(reader.result).split(',')[1]); reader.onerror = () => reject(new CreateImageProjectError('invalidImage')); reader.readAsDataURL(blob);
+  });
+  const response = await fetch('/__studio/create-project', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, image }) });
+  const result = await response.json();
+  if (!response.ok) throw new CreateImageProjectError(result.code ?? 'failed');
+  return result;
+}
 export async function importAvatar(file: File): Promise<LocalProject> {
   if (file.size > 128 * 1024 * 1024) throw new Error('Archive exceeds 128 MiB.');
   const response = await fetch('/__studio/import', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file });

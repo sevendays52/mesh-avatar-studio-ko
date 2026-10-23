@@ -15,7 +15,7 @@ from agent_common import ROOT, inside_repo, save_json
 from PIL import Image
 
 
-def create(source, name, force=False):
+def create(source, name, force=False, in_place=False):
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name):
         raise ValueError("name must use letters, digits, hyphens or underscores")
     with Image.open(source) as image:
@@ -38,12 +38,20 @@ def create(source, name, force=False):
         raise ValueError(
             "project must stay inside projects/; redirected paths are not allowed"
         )
-    if project.exists() and not force:
+    if in_place and force:
+        raise ValueError("--in-place cannot be combined with --force")
+    if project.exists() and not force and not in_place:
         raise ValueError(
             "project already exists; use --force to replace source and draft (other files are retained)"
         )
-    if (project / "source.png").resolve() == source.resolve():
+    same_source = (project / "source.png").resolve() == source.resolve()
+    if same_source and not in_place:
         raise ValueError("input is already this project's source.png")
+    if in_place and (
+        not same_source
+        or any((project / filename).exists() for filename in ("rig.json", "rig.draft.json", "built", "variants"))
+    ):
+        raise ValueError("--in-place requires this project's source.png and no existing rig, layers or variants")
     template = json.loads((ROOT / "samples/miko-qipao/rig.json").read_text())
     ellipse = lambda x, y, rx, ry: {
         "cx": w * x,
@@ -95,7 +103,8 @@ def create(source, name, force=False):
     # Retain engine defaults, but no example illustration's gaze origin.
     rig["view"].pop("gazeCenter", None)
     (project / "work").mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(source, project / "source.png")
+    if not same_source:
+        shutil.copyfile(source, project / "source.png")
     save_json(rig, project / "rig.draft.json")
     if not (project / "avatar.json").exists():
         save_json({"format": "mesh-avatar", "version": 1, "name": name}, project / "avatar.json")
@@ -113,9 +122,10 @@ def main():
     parser.add_argument("image", type=Path)
     parser.add_argument("name")
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--in-place", action="store_true", help="Initialize a browser-created source-only project without replacing its image")
     args = parser.parse_args()
     try:
-        create(args.image, args.name, args.force)
+        create(args.image, args.name, args.force, args.in_place)
     except (OSError, ValueError) as error:
         print(f"new-project: {error}", file=sys.stderr)
         return 1

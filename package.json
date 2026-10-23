@@ -6,6 +6,7 @@
   "workspaces": ["packages/*"],
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "start": "node tools/start-studio.mjs",
     "dev:site": "vite --config site/vite.config.ts",
     "build:site": "tsc -p site/tsconfig.json && vite build --config site/vite.config.ts",
     "preview:site": "vite preview --config site/vite.config.ts",

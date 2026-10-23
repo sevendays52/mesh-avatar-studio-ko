@@ -11,6 +11,7 @@ import { packProjectAvatar } from '../../packages/runtime/src/format/project-arc
 import { checkEntryName } from '../../packages/runtime/src/format/zip';
 import type { LocalProject, LocalProjectEntry } from '../project-types';
 import { decodeVariants, JobError, projectJob, runTool, variantState, VARIANTS, type Runner } from './project-jobs';
+import { createImageProject, ProjectCreateError } from './create-project';
 
 const SAMPLE = 'sample-miko-qipao';
 const displayPath = (path: string) => path === homedir() ? '~' : path.startsWith(`${homedir()}${sep}`) ? `~${path.slice(homedir().length)}` : path;
@@ -174,6 +175,15 @@ export function localProjectMiddleware(root: string, reveal = revealFolder, runn
   async function info(name: string): Promise<LocalProject | null> {
     const path = await folder(name), rigPath = resolve(path, 'rig.json');
     const draft = resolve(path, 'rig.draft.json');
+    const marker = resolve(path, '.studio-project.json');
+    if (name !== SAMPLE && await exists(marker) && (!await exists(rigPath) || !await exists(resolve(path, 'built/layers.json')))) {
+      let metadata;
+      try { metadata = JSON.parse(await readFile(await checked(path, marker), 'utf8')); } catch (error) { if (error instanceof SyntaxError) return null; throw error; }
+      if (metadata.version !== 1 || !Number.isSafeInteger(metadata.image?.width) || !Number.isSafeInteger(metadata.image?.height) || !await sourceFile(path)) return null;
+      return { name, relativePath: relative(root, path).split(sep).join('/'), absolutePath: path, displayPath: displayPath(path),
+        updatedAt: (await stat(marker)).mtime.toISOString(), hasSprites: false, hasVariants: false, hasSource: true,
+        readOnly: false, stage: 'setup', image: metadata.image };
+    }
     if (!await exists(rigPath) && !(await exists(draft) && await exists(resolve(path, 'built')))) return null;
     const file = await checked(path, await exists(rigPath) ? rigPath : draft);
     return { name, relativePath: relative(root, path).split(sep).join('/'), absolutePath: path, displayPath: displayPath(path),
@@ -198,6 +208,10 @@ export function localProjectMiddleware(root: string, reveal = revealFolder, runn
       });
       if (parts.length === 1 && parts[0] === 'context' && req.method === 'GET') { json(200, { rootPath: root, displayRootPath: displayPath(root) }); return; }
       if (parts.length === 1 && parts[0] === 'reveal' && req.method === 'POST') { await reveal(root); json(200, { path: root }); return; }
+      if (parts.length === 1 && parts[0] === 'create-project' && req.method === 'POST') {
+        const name = await createImageProject(root, await readBody(req, 33 * 1024 * 1024));
+        json(201, await info(name)); return;
+      }
       if (parts.length === 1 && parts[0] === 'export' && req.method === 'POST') {
         const body = await readBody(req);
         if (!body || typeof body.project !== 'string' || (body.includeSource !== undefined && typeof body.includeSource !== 'boolean')) throw new HttpError(400, 'Expected project and includeSource.');
@@ -318,6 +332,7 @@ export function localProjectMiddleware(root: string, reveal = revealFolder, runn
       res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
       res.end(bytes);
     } catch (error) {
+      if (error instanceof ProjectCreateError) { json(400, { error: error.message, code: error.message }); return; }
       if (error instanceof JobError) { json(422, { error: error.code, code: error.code, log: error.log }); return; }
       const failure = fileSystemError(root, error, errorPath);
       if (failure) { json(failure.status, failure.body); return; }

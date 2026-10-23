@@ -25,6 +25,8 @@ import { readRecent, addRecent, saveRecent, REOPEN_KEY, pickDirectory, hasDirect
   keepDirectory, restoreDirectory, forgetDirectory, clearDirectories, type RecentProject, type ProjectDirectory } from './recent-projects';
 import './style.css';
 import { liveText } from '../live/i18n';
+import { ProjectHub } from './ProjectHub';
+import { projectFlowText } from './project-flow-i18n';
 
 type EditorError = { kind: 'invalidRig' | 'invalidFolder' | 'missingFolderFiles' | 'unreadableFolder' | 'unreadableProject' | 'invalidValue' | 'saveError' | 'revealError' | 'copyError' | 'continueError'; paths: string[] };
 function errorPaths(value: string) { return [...new Set(value.match(/rig(?:\.[\w]+|\[\d+\])+/g) ?? [])]; }
@@ -32,6 +34,9 @@ function errorPaths(value: string) { return [...new Set(value.match(/rig(?:\.[\w
 export function App() { return <I18nProvider><Workspace /></I18nProvider>; }
 function Workspace() {
   const { t, parts, language, locale, setLanguage, title } = useI18n();
+  const [projectHub, setProjectHub] = useState(() => new URLSearchParams(location.search).has('projects'));
+  const [setupProject, setSetupProject] = useState<LocalProject | null>(null);
+  const flow = projectFlowText[language];
   const openMenu = useRef<HTMLDetailsElement>(null);
   const [guide, setGuide] = useState(() => readPreference(GUIDE_KEY) !== '1');
   const [help, setHelp] = useState(false);
@@ -84,7 +89,7 @@ function Workspace() {
       const missing = list ? entries.filter(entry => entry.kind === 'server' && !list.some(project => project.name === entry.serverName)) : [];
       const available = entries.filter(entry => !missing.includes(entry));
       if (missing.length) { setRecent(available); saveRecent(available); setNotice({ key: 'missingRecent', path: missing.map(entry => entry.name).join(', ') }); }
-      if (readPreference(REOPEN_KEY) === '0' || !available.length || projectOpened.current) return;
+      if (projectHub || readPreference(REOPEN_KEY) === '0' || !available.length || projectOpened.current) return;
       const latest = available[0];
       if (latest.kind === 'server') {
         const project = list?.find(item => item.name === latest.serverName);
@@ -177,13 +182,19 @@ function Workspace() {
   const openLocal = async (entry: LocalProjectEntry, automatic = false) => {
     if (jobRef.current) return;
     if (entry.error) { setError({ kind: 'unreadableProject', paths: [entry.error.code, entry.error.path] }); return; }
+    if (entry.stage === 'setup') {
+      projectOpened.current = true; setSetupProject(entry); setProjectHub(true); setError(null);
+      remember({ id: `server:${entry.name}`, kind: 'server', name: entry.name, serverName: entry.name, relativePath: entry.relativePath, lastOpened: new Date().toISOString() });
+      if (openMenu.current) openMenu.current.open = false;
+      return;
+    }
     setOpening(true);
     try {
       const project = await openLocalProject(entry);
       projectOpened.current = true;
       history.load(project.rig!); setRig(history.present); setDragStale(null); setBuiltSignature(layerSignature(project.rig!));
       setSavedRig(JSON.stringify(project.rig)); pickedFiles.current = undefined;
-      setSelected(null); setLocalProject(entry); setPickedName('');
+      setSelected(null); setLocalProject(entry); setPickedName(''); setProjectHub(false); setSetupProject(null);
       objectUrls.current.forEach(url => URL.revokeObjectURL(url)); objectUrls.current = [];
       setSourceUrl(project.sourceUrl); setAssets(project.assets); setChecking(false); setError(null);
       setRebuildError(null);
@@ -217,6 +228,10 @@ function Workspace() {
   };
   useEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
+      if (projectHub) {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') event.preventDefault();
+        return;
+      }
       if (event.key === 'Escape') { setHelp(false); if (openMenu.current) openMenu.current.open = false; }
       if (!(event.ctrlKey || event.metaKey)) return;
       if (jobRef.current) { if (['s', 'z'].includes(event.key.toLowerCase())) event.preventDefault(); return; }
@@ -229,7 +244,7 @@ function Workspace() {
     };
     window.addEventListener('keydown', keyboard);
     return () => window.removeEventListener('keydown', keyboard);
-  }, [history]);
+  }, [history, projectHub]);
   const selectPart = (group: string) => { setSelected(group); setVisible(current => current.includes(group) ? current : [...current, group]); };
   const selectedGroup = selected?.split('.')[0] as PartGroup | undefined;
   const selectedPart = selectedGroup && parts[selectedGroup];
@@ -380,10 +395,11 @@ function Workspace() {
     finally { jobRef.current = null; setArchiveBusy(false); }
   };
   const importControl = <ImportAvatar busy={busy || saving} available={!!rootPath} onImport={file => { void importFile(file); }} />;
-  return <main onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file?.name.toLowerCase().endsWith('.mavatar')) void importFile(file); else void openFile(file); }}>
+  return <main className={projectHub ? 'project-hub-active' : undefined} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); if (projectHub) return; const file = event.dataTransfer.files[0]; if (file?.name.toLowerCase().endsWith('.mavatar')) void importFile(file); else void openFile(file); }}>
     <header className="toolbar">
       <div className="brand"><h1>{t.product}</h1><p>{t.subtitle}</p></div>
       <nav aria-label={t.tools}>
+        <button className="project-home-button" disabled={busy || saving} onClick={() => { setSetupProject(null); setProjectHub(true); void localProjects().then(setProjects); }}>{flow.home}</button>
         <input ref={fileInput} type="file" accept=".json,application/json" hidden aria-label={t.rigFile}
           onChange={event => { void openFile(event.target.files?.[0]); event.target.value = ''; }} />
         <input ref={folderInput} type="file" multiple hidden aria-label={t.folderFiles} {...{ webkitdirectory: '' }}
@@ -397,7 +413,7 @@ function Workspace() {
               {projects.map(project => <button key={project.name} className={project.error ? 'unreadable-project' : undefined} disabled={opening || !!project.error} data-testid={`project-${project.name}`} onClick={() => { void openLocal(project); }}>
                 <strong>{project.readOnly ? t.sampleProject : project.name}</strong><small>{project.relativePath}</small>
                 <small>{project.error ? <>{t.unreadableProject} ({project.error.code}) · {project.error.path}</> : <>{t.updated}: {new Date(project.updatedAt).toLocaleString(locale)}
-                  {project.hasSprites && <span className="badge">{t.drawnVariants}</span>}{project.readOnly && <span className="badge">{t.readOnly}</span>}{project.hasSource === false && <span className="badge">{sharing.playbackBadge}</span>}</>}</small>
+                  {project.stage === 'setup' && <span className="badge">{flow.pending}</span>}{project.hasSprites && <span className="badge">{t.drawnVariants}</span>}{project.readOnly && <span className="badge">{t.readOnly}</span>}{project.hasSource === false && <span className="badge">{sharing.playbackBadge}</span>}</>}</small>
               </button>)}
             </div>}
             <button onClick={() => { void chooseFile(true); }}>{t.openFolder}</button><button disabled={playbackOnly} onClick={() => { void chooseFile(false); }}>{t.openRig}</button>
@@ -421,7 +437,13 @@ function Workspace() {
         </div>
       </nav>
     </header>
-    {(localProject || pickedName) && <div className="project-location" data-testid="project-location">
+    {projectHub && <><ProjectHub projects={projects} rootPath={rootPath} pending={setupProject} opening={opening}
+      onProjects={setProjects} onBack={() => setSetupProject(null)} onEditor={() => setProjectHub(false)}
+      onSelect={entry => { void openLocal(entry); }} onCreated={entry => {
+        projectOpened.current = true; setSetupProject(entry);
+        setProjects(current => [entry, ...(current ?? []).filter(project => project.name !== entry.name)]);
+      }} />{errorNotice}</>}
+    {!projectHub && (localProject || pickedName) && <div className="project-location" data-testid="project-location">
       <strong>{localProject?.readOnly ? t.sampleProject : localProject?.name || pickedName}</strong>
       {localProject && <><CopyButton value={localProject.absolutePath} label={t.copyPath} icon />
       <button className="icon-button" aria-label={navigator.platform.includes('Mac') ? t.showFinder : t.showFolder} title={navigator.platform.includes('Mac') ? t.showFinder : t.showFolder} onClick={() => { void reveal(); }}><Icon name="folder" /></button>
@@ -431,15 +453,15 @@ function Workspace() {
     {archiveFeedback && <div className={`archive-feedback${archiveFeedback.error ? ' error' : ''}`} role={archiveFeedback.error ? 'alert' : 'status'}>
       <span>{archiveFeedback.error ?? `${sharing.imported} ${archiveFeedback.name}`}</span><button onClick={() => setArchiveFeedback(null)}>{sharing.dismiss}</button>
     </div>}
-    {playbackOnly && <p className="playback-notice" role="status">{sharing.playbackOnly}</p>}
+    {!projectHub && playbackOnly && <p className="playback-notice" role="status">{sharing.playbackOnly}</p>}
     {help && <Help onClose={() => setHelp(false)} onGuide={() => { setGuide(true); setHelp(false); }} />}
-    {(dragStale ?? changed.length > 0) && <div className="stale" data-testid="stale-banner"><p role="status">{localProject && !localProject.readOnly ? t.staleLocal : sampleEditing ? t.staleSample : listedProject ? t.staleListed : t.stale}</p><small>{t.changedParts}: {changed.map(key => parts[key as PartGroup]?.[0] ?? title(key)).join(' · ')}</small>
+    {!projectHub && (dragStale ?? changed.length > 0) && <div className="stale" data-testid="stale-banner"><p role="status">{localProject && !localProject.readOnly ? t.staleLocal : sampleEditing ? t.staleSample : listedProject ? t.staleListed : t.stale}</p><small>{t.changedParts}: {changed.map(key => parts[key as PartGroup]?.[0] ?? title(key)).join(' · ')}</small>
       {localProject && !localProject.readOnly ? <button className="primary" disabled={job !== null || saving} onClick={() => { setRebuildError(null); void runJob('rebuild').catch(error => setRebuildError(error instanceof ProjectJobError ? error : new ProjectJobError('toolFailed'))); }}>{job === 'rebuild' ? t.rebuilding : t.rebuild}</button> : <><small>{sampleEditing ? t.sampleRebuildReason : t.folderRebuildReason}</small>{sampleEditing || listedProject ? <button className="primary" disabled={opening || saving || job !== null || (sampleEditing && !rootPath)} onClick={() => { void continueEditing(); }}>{opening ? t.operationBusy : sampleEditing ? t.copyContinue : t.reopenListed}</button> : <p>{t.rebuildUnavailable}</p>}</>}
       {rebuildError && <JobFeedback error={rebuildError} rig={rig} />}
       {error?.kind === 'continueError' && errorNotice}
     </div>}
-    {!sourceUrl && !assets && <section className="panel empty-project"><h2>{checking ? t.checking : t.emptyTitle}</h2><p>{t.projectHelp}</p><p>{t.emptyHelp}</p>{recentControl}<AskAgent newProject rootPath={rootPath} />{errorNotice}</section>}
-    {(sourceUrl || assets) && <div className={`workspace${playbackOnly ? ' playback-only' : ''}`}>
+    {!projectHub && !sourceUrl && !assets && <section className="panel empty-project"><h2>{checking ? t.checking : t.emptyTitle}</h2><p>{t.projectHelp}</p><p>{t.emptyHelp}</p>{recentControl}<AskAgent newProject rootPath={rootPath} />{errorNotice}</section>}
+    {!projectHub && (sourceUrl || assets) && <div className={`workspace${playbackOnly ? ' playback-only' : ''}`}>
       {!playbackOnly && <div className="parts-container" inert={busy}><PartList rig={rig} visible={visible} selected={selected} onSelect={selectPart} onFocus={group => { selectPart(group); setFocusRequest(current => ({ group, id: (current?.id ?? 0) + 1 })); }} onVisible={setVisible} /></div>}
       {!playbackOnly && <section className="panel editor-panel" inert={busy}>
         <div className="panel-title"><h2>{t.source}</h2><span>{rig.image.width} × {rig.image.height} {t.px}</span></div>

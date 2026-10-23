@@ -15,6 +15,8 @@ export interface LocalProject extends ProjectIdentity {
   hasVariants: boolean;
   hasSource?: boolean;
   rigFile?: 'rig.json' | 'rig.draft.json';
+  stage?: 'setup';
+  image?: { width: number; height: number };
 }
 
 export interface UnreadableProject extends ProjectIdentity { error: ProjectFileError }

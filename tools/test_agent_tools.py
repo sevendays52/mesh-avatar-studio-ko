@@ -136,6 +136,28 @@ class AgentToolsTest(unittest.TestCase):
         Image.new("RGB", (100, 100)).save(wrong)
         self.assertEqual(self.cli("new-project", wrong, name, "--force").returncode, 1)
 
+    def test_browser_project_initializes_in_place_without_replacing_source_or_metadata(self):
+        name = self.project.name + "-browser"
+        created = ROOT / "projects" / name
+        created.mkdir()
+        self.addCleanup(module_cleanup, created)
+        source = created / "source.png"
+        source.write_bytes((self.project / "source.png").read_bytes())
+        source_before = source.read_bytes()
+        metadata = created / "avatar.json"
+        metadata.write_text(json.dumps({"format": "mesh-avatar", "version": 1, "name": "My image", "author": "Artist"}))
+        metadata_before = metadata.read_bytes()
+        result = self.cli("new-project", source, name, "--in-place")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(source.read_bytes(), source_before)
+        self.assertEqual(metadata.read_bytes(), metadata_before)
+        draft = created / "rig.draft.json"
+        draft_before = draft.read_bytes()
+        self.assertEqual(json.loads(draft_before)["image"], {"width": 100, "height": 100})
+        self.assertEqual(self.cli("new-project", source, name, "--in-place").returncode, 1)
+        self.assertEqual(draft.read_bytes(), draft_before)
+        self.assertEqual(self.cli("new-project", source, name, "--in-place", "--force").returncode, 1)
+
     def test_variants_cover_only_regions_and_missing_variants_are_clean(self):
         eyes, mouth = edit_masks(self.rig, (100, 100))
         self.assertEqual(int(eyes[0][30, 20]), 1)
