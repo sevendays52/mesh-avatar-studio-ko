@@ -2,6 +2,17 @@ import { LIGHTING_EVENT, lightingWire, lightingMessage, lightingValue } from '..
 import type { LightingSettings } from 'mesh-avatar';
 import { LIVE_EVENT, liveMessage } from './protocol';
 import { EXPRESSION_EVENT, LIGHTING_PRESET_EVENT, expressionMessage, lightingPresetMessage, type RemoteExpression } from './expression-protocol';
+import { VIEWPORT_EVENT, viewportMessage } from './viewport';
+import type { AvatarViewport } from 'mesh-avatar';
+
+export function sendViewport(project: string, viewport: AvatarViewport) {
+  import.meta.hot?.send(VIEWPORT_EVENT, { project, viewport });
+}
+export function receiveViewport(project: string, callback: (value: AvatarViewport) => void) {
+  const receive = (data: unknown) => { const message = viewportMessage(data); if (message?.project === project) callback(message.viewport); };
+  import.meta.hot?.on(VIEWPORT_EVENT, receive);
+  return () => import.meta.hot?.off(VIEWPORT_EVENT, receive);
+}
 
 export function createLiveSender(project: string, sender = randomSender()) {
   let sent = -Infinity;

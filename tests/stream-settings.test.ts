@@ -20,6 +20,13 @@ test('archive URLs round-trip while an explicit project takes precedence', () =>
   expect(viewSettings('?project=../bad&avatar=ignored.mavatar').avatar).toBeUndefined();
 });
 
+test('zoom and position round-trip through OBS URLs and clamp malformed values', () => {
+  const settings = viewSettings('?project=dogcake-test&zoom=3.2&panX=-0.2&panY=1.1');
+  expect(settings.viewport).toEqual({ zoom: 3.2, x: -0.2, y: 1.1 });
+  expect(viewSettings(new URL(streamUrl(settings, 'http://127.0.0.1:5173')).search)).toEqual(settings);
+  expect(viewSettings('?zoom=Infinity&panX=NaN&panY=99').viewport).toEqual({ zoom: 1, x: 0, y: 4 });
+});
+
 test('stream avatar sources stay on the current server origin', () => {
   const origin = 'http://127.0.0.1:5173';
   for (const value of ['https://example.com/a.mavatar', '//example.com/a.mavatar', 'http://127.0.0.1:5174/a.mavatar', 'data:application/zip,abc', 'blob:http://127.0.0.1:5173/id', 'http://user@127.0.0.1:5173/a.mavatar', 'http://[invalid']) {

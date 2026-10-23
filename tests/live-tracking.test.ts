@@ -1,6 +1,22 @@
 import { expect, test } from 'vitest';
-import { FacePose, mapFace, readFace, smoothParameters, rmsLevel, faceNeutral, type FaceResult } from '../src/live/tracking';
+import { FacePose, mapFace, readFace, smoothParameters, rmsLevel, faceNeutral, intentionalPitch, relativeFaceAngles, type FaceResult } from '../src/live/tracking';
+import fixture from '../samples/miko-qipao/rig.json';
+import { parseRig } from 'mesh-avatar';
+import { createRig } from '../packages/runtime/src/engine/rig.js';
+import { createSpriteModule } from '../packages/runtime/src/engine/sprites.js';
 const options = { mirror: false, sensitivity: 1, smoothing: 0 };
+const multiply = (a: number[], b: number[]) => Array.from({ length: 9 }, (_, i) => {
+  const row = i % 3, col = Math.floor(i / 3);
+  return a[row] * b[col * 3] + a[row + 3] * b[col * 3 + 1] + a[row + 6] * b[col * 3 + 2];
+});
+function rotationInput(yaw: number, pitch: number, roll: number) {
+  const [y, p, r] = [yaw, pitch, roll].map(v => v * Math.PI / 180);
+  const a = multiply([Math.cos(y),0,-Math.sin(y),0,1,0,Math.sin(y),0,Math.cos(y)],
+    multiply([1,0,0,0,Math.cos(p),Math.sin(p),0,-Math.sin(p),Math.cos(p)],
+      [Math.cos(r),Math.sin(r),0,-Math.sin(r),Math.cos(r),0,0,0,1]));
+  const input = result(); input.facialTransformationMatrixes[0].data = [a[0],a[1],a[2],0,a[3],a[4],a[5],0,a[6],a[7],a[8],0,0,0,0,1];
+  return input;
+}
 function result(yaw = 0, shapes: Record<string, number> = {}): FaceResult {
   const a = yaw * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
   return { faceLandmarks: [[]], facialTransformationMatrixes: [{ data: [c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1] }], faceBlendshapes: [{ categories: Object.entries(shapes).map(([categoryName, score]) => ({ categoryName, score })) }] };
@@ -62,4 +78,93 @@ test('microphone RMS has a noise floor, gain and a finite 0–1 output', () => {
   expect(rmsLevel(samples, 2)).toBeCloseTo(rmsLevel(samples, 1) * 2);
   expect(rmsLevel(new Float32Array([1, -1]), 5)).toBe(1);
   expect(rmsLevel(new Float32Array([NaN]), 1)).toBe(0);
+});
+
+test('mouth sensitivities reach distinct drawn shapes without amplifying eyes or head pose', () => {
+  const rig = parseRig(fixture);
+  const { mouthShape } = createSpriteModule(createRig(rig), rig);
+  const mouthOptions = { ...options, mouthSensitivity: 2, mouthShapeSensitivity: 2 };
+  const mapped = (shapes: Record<string, number>) => mapFace(readFace(result(12, shapes))!, null, mouthOptions);
+  const shape = (shapes: Record<string, number>) => {
+    const p = mapped(shapes); return mouthShape(p.mouthOpen, p.mouthForm);
+  };
+  expect(shape({})).toBeNull();
+  expect(shape({ jawOpen: .18, mouthClose: .02 })).toBe('aHalf');
+  expect(shape({ jawOpen: .35, mouthClose: .02 })).toBe('a');
+  expect(shape({ jawOpen: .25, mouthStretchLeft: .4, mouthStretchRight: .4 })).toBe('i');
+  expect(shape({ jawOpen: .25, mouthFunnel: .3 })).toBe('o');
+  expect(shape({ jawOpen: .25, mouthPucker: .6 })).toBe('u');
+  const face = readFace(result(12, { jawOpen: .35, eyeBlinkLeft: .9 }))!;
+  const original = mapFace(face, null, options), adjusted = mapFace(face, null, mouthOptions);
+  expect(adjusted.angleX).toBe(original.angleX);
+  expect(adjusted.eyeLOpen).toBe(original.eyeLOpen);
+  expect(adjusted.mouthOpen).toBeCloseTo(original.mouthOpen * 2);
+  expect(mapped({ jawOpen: .2, mouthClose: .8 }).mouthOpen).toBe(0);
+});
+
+test('mouth sensitivity keeps calibrated closed lips neutral and clamps extremes', () => {
+  const neutral = readFace(result(0, { jawOpen: .12, mouthPucker: .15 }))!;
+  const mouthOptions = { ...options, mouthSensitivity: 4, mouthShapeSensitivity: 4 };
+  expect(mapFace(neutral, neutral, mouthOptions)).toMatchObject({ mouthOpen: 0, mouthForm: 0 });
+  const wide = readFace(result(0, { jawOpen: 1, mouthStretchLeft: 1, mouthStretchRight: 1 }))!;
+  expect(mapFace(wide, neutral, mouthOptions)).toMatchObject({ mouthOpen: 1, mouthForm: -1 });
+  const round = readFace(result(0, { jawOpen: .3, mouthPucker: 1 }))!;
+  expect(mapFace(round, neutral, mouthOptions).mouthForm).toBe(1);
+});
+
+test('head nod follows matrix pitch around the calibrated pose with independent gain and direction', () => {
+  const nod = (pitch: number) => {
+    const input = result(), a = pitch * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    input.facialTransformationMatrixes[0].data = [1,0,0,0,0,c,s,0,0,-s,c,0,0,0,0,1];
+    return input;
+  };
+  const pose = new FacePose(); pose.update(nod(5), 0); expect(pose.calibrate(0)).toBe(true);
+  const settings = { ...options, pitchSensitivity: 2 };
+  pose.update(nod(15), 100);
+  expect(pose.sample(100, 1 / 60, settings).params.angleY).toBeCloseTo(-20);
+  expect(pose.sample(100, 1 / 60, { ...settings, mirror: true }).params.angleY).toBeCloseTo(-20);
+  expect(pose.sample(100, 1 / 60, { ...settings, invertPitch: true }).params.angleY).toBeCloseTo(20);
+  pose.update(nod(-5), 200); expect(pose.sample(200, 1 / 60, settings).params.angleY).toBeCloseTo(20);
+  pose.update(nod(50), 300); expect(pose.sample(300, 1 / 60, settings).params.angleY).toBe(-30);
+  expect(pose.sample(1000, 0.1, settings).params.angleY).toBeGreaterThan(-30);
+});
+
+test('cheek puff is calibrated, independent of smiling and decays after face loss', () => {
+  const pose = new FacePose(); pose.update(result(0, { cheekPuff: 0.1 }), 0); pose.calibrate(0);
+  expect(pose.sample(0, 0.1, options).params.cheekPuff).toBe(0);
+  pose.update(result(0, { cheekPuff: 0.7, mouthClose: 0.9 }), 10);
+  expect(pose.sample(10, 0.1, options).params).toMatchObject({ cheekPuff: 1, mouthOpen: 0 });
+  expect(mapFace(readFace(result(0, { cheekSquintLeft: 1, mouthSmileLeft: 1 }))!, null, options).cheekPuff).toBe(0);
+  expect(pose.sample(1000, 0.2, options).params.cheekPuff).toBeLessThan(0.4);
+});
+
+test('torso follows the head gradually and remains independent of cheek puff', () => {
+  const pose = new FacePose(); pose.update(result(30, { cheekPuff: 0.8 }), 0);
+  const first = pose.sample(0, 1 / 60, options).params;
+  expect(first.angleX).toBeCloseTo(30); expect(first.cheekPuff).toBe(1);
+  expect(first.bodyAngleX).toBeGreaterThan(0); expect(first.bodyAngleX).toBeLessThan(1);
+  const later = pose.sample(100, 0.4, options).params;
+  expect(later.bodyAngleX).toBeGreaterThan(5); expect(later.bodyAngleX).toBeLessThanOrEqual(6);
+});
+
+test('calibrated rotation separates a horizontal turn from an inclined neutral head', () => {
+  const neutral = readFace(rotationInput(0, 12, 8))!;
+  for (const yaw of [-50, -30, 0, 30, 50]) {
+    const face = readFace(rotationInput(yaw, 12, 8))!;
+    const angles = relativeFaceAngles(face, neutral);
+    expect(angles.yaw).toBeCloseTo(yaw, 10); expect(angles.pitch).toBeCloseTo(0, 10); expect(angles.roll).toBeCloseTo(0, 10);
+    expect(mapFace(face, neutral, { ...options, pitchSensitivity: 2 }).angleY).toBeCloseTo(0, 10);
+  }
+});
+
+test('small pitch drift while turning does not select a bowed drawing, but true nods still work', () => {
+  for (const yaw of [-50, -30, 30, 50]) {
+    expect(intentionalPitch(3, yaw)).toBe(0); expect(intentionalPitch(-3, yaw)).toBe(0);
+    expect(mapFace(readFace(rotationInput(yaw, 3, 0))!, null, { ...options, pitchSensitivity: 2 }).angleY).toBeCloseTo(0);
+    expect(mapFace(readFace(rotationInput(yaw, 12, 0))!, null, { ...options, pitchSensitivity: 2 }).angleY).toBeCloseTo(-24);
+  }
+  let previous = 0;
+  for (let pitch = 0; pitch <= 15; pitch += .05) {
+    const value = intentionalPitch(pitch, 30); expect(value).toBeGreaterThanOrEqual(previous); previous = value;
+  }
 });

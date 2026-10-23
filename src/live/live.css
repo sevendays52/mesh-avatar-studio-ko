@@ -19,6 +19,9 @@ p { line-height: 1.5; } small { display: block; color: #546a87; line-height: 1.5
 .live-preview { height: calc(100dvh - 150px); min-height: 320px; border: 1px solid #d5dfeb; border-radius: 12px; overflow: hidden; }
 .checkerboard { background-image: conic-gradient(#e1e5eb 25%, #f8f9fb 0 50%, #e1e5eb 0 75%, #f8f9fb 0); background-size: 24px 24px; }
 .live-preview canvas { display: block; width: 100%; height: 100%; }
+.live-preview canvas { cursor: grab; touch-action: none; }
+.live-preview canvas:active { cursor: grabbing; }
+.live-view > small { margin-top: 8px; }
 .live-controls { display: flex; flex-direction: column; gap: 14px; }
 .live-controls section { padding: 16px; border: 1px solid #d5dfeb; border-radius: 12px; background: white; }
 .live-controls label { display: flex; flex-direction: column; gap: 7px; margin: 12px 0; }

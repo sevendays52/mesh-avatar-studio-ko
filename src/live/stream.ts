@@ -1,7 +1,7 @@
 import { createAvatarView, neutralParameters } from './avatar-view';
 import { viewSettings } from './settings';
 import { LivePose } from './protocol';
-import { receiveLighting, receiveLiveParameters } from './relay';
+import { receiveLighting, receiveLiveParameters, receiveViewport } from './relay';
 import './stream.css';
 
 const settings = viewSettings(location.search);
@@ -9,6 +9,7 @@ document.documentElement.style.background = settings.background;
 const canvas = document.querySelector<HTMLCanvasElement>('#avatar')!;
 const pose = new LivePose(settings.project);
 let avatarInstance: import('mesh-avatar').MeshAvatar | undefined;
+const unsubscribeViewport = receiveViewport(settings.project, value => { settings.viewport = value; avatarInstance?.setViewport(value); });
 const unsubscribeLighting = receiveLighting(settings.project, value => { settings.lighting = value; avatarInstance?.setLighting(value); });
 const unsubscribe = receiveLiveParameters(data => pose.receive(data, performance.now()));
 void createAvatarView(canvas, settings, (avatar, now, dt) => {
@@ -23,8 +24,9 @@ void createAvatarView(canvas, settings, (avatar, now, dt) => {
   }
 }).then(view => {
   avatarInstance = view.avatar;
+  if (settings.viewport) view.avatar.setViewport(settings.viewport);
   if (settings.lighting) view.avatar.setLighting(settings.lighting);
-  const destroy = () => { unsubscribe(); unsubscribeLighting(); avatarInstance = undefined; view.destroy(); };
+  const destroy = () => { unsubscribe(); unsubscribeLighting(); unsubscribeViewport(); avatarInstance = undefined; view.destroy(); };
   window.addEventListener('pagehide', destroy, { once: true });
   import.meta.hot?.dispose(destroy);
-}).catch(() => { unsubscribe(); unsubscribeLighting(); canvas.dataset.state = 'error'; });
+}).catch(() => { unsubscribe(); unsubscribeLighting(); unsubscribeViewport(); canvas.dataset.state = 'error'; });

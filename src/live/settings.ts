@@ -1,5 +1,7 @@
 import type { LightingSettings } from 'mesh-avatar';
 import { lightingFromQuery, writeLightingQuery } from '../lighting/storage';
+import { parseViewport } from './viewport';
+import type { AvatarViewport } from 'mesh-avatar';
 export const SAMPLE_PROJECT = 'sample-miko-qipao';
 export interface ViewSettings {
   project: string;
@@ -8,6 +10,7 @@ export interface ViewSettings {
   fit: 'contain' | 'cover';
   idle: boolean;
   lighting?: LightingSettings;
+  viewport?: AvatarViewport;
 }
 export function backgroundColor(value: string | null): string {
   if (value === 'green') return '#00ff00';
@@ -27,6 +30,7 @@ export function viewSettings(search: string, origin = globalThis.location?.origi
   } catch { /* Invalid or external URLs fall back to the sample. */ }
   return { project: project && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(project) ? project : SAMPLE_PROJECT,
     ...(avatar ? { avatar } : {}),
+    ...(['zoom', 'panX', 'panY'].some(key => query.has(key)) ? { viewport: parseViewport({ zoom: query.has('zoom') ? Number(query.get('zoom')) : 1, x: Number(query.get('panX')), y: Number(query.get('panY')) }) } : {}),
     background: backgroundColor(query.get('bg')), fit: query.get('fit') === 'cover' ? 'cover' : 'contain', idle: query.get('idle') !== '0', ...(query.has('light') ? { lighting: lightingFromQuery(query) } : {}) };
 }
 export function streamUrl(settings: ViewSettings, origin: string): string {
@@ -34,5 +38,10 @@ export function streamUrl(settings: ViewSettings, origin: string): string {
   url.search = new URLSearchParams({ project: settings.project, bg: settings.background, fit: settings.fit, idle: settings.idle ? '1' : '0' }).toString();
   if (settings.avatar) { url.searchParams.delete('project'); url.searchParams.set('avatar', settings.avatar); }
   if (settings.lighting) writeLightingQuery(url.searchParams, settings.lighting);
+  if (settings.viewport) {
+    url.searchParams.set('zoom', String(settings.viewport.zoom));
+    url.searchParams.set('panX', String(settings.viewport.x));
+    url.searchParams.set('panY', String(settings.viewport.y));
+  }
   return url.href;
 }

@@ -1,6 +1,7 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { PNG } from 'pngjs';
 import { samplePresent, sampleSkipReason } from './sample';
+import { createHash } from 'node:crypto';
 
 test.beforeEach(() => { test.skip(!samplePresent, sampleSkipReason); });
 
@@ -51,6 +52,85 @@ async function stubTracker(page: Page, moving = false) {
 async function ready(page: Page, url: string) {
   await page.goto(url); await expect(page.locator('canvas[data-state="ready"]')).toBeVisible();
 }
+
+test('Live zooms and pans, centres face and upper body, persists framing and relays to an open stream', async ({ context, page }) => {
+  const outside = await guardNetwork(context);
+  await ready(page, '/live.html?idle=0');
+  const stream = await context.newPage(); await ready(stream, '/stream.html?idle=0');
+  const unrelated = await context.newPage(); await ready(unrelated, '/stream.html?project=sample-miko-qipao&idle=0');
+  await unrelated.evaluate(async () => {
+    const path = '/src/live/relay.ts'; const { receiveViewport } = await import(path);
+    receiveViewport('another-project', () => { document.body.dataset.wrongProject = 'yes'; });
+  });
+  const canvas = page.getByTestId('live-avatar'), zoom = page.getByRole('slider', { name: 'Zoom', exact: true });
+  const hash = async (target: Page) => createHash('sha256').update(await target.locator('canvas').screenshot()).digest('hex');
+  const before = await hash(stream), size = await canvas.evaluate(c => ({ width: (c as HTMLCanvasElement).width, height: (c as HTMLCanvasElement).height }));
+  await page.getByRole('button', { name: 'Face', exact: true }).click();
+  await expect.poll(async () => Number(await zoom.inputValue())).toBeGreaterThan(1);
+  await expect.poll(() => hash(stream)).not.toBe(before);
+  expect(await canvas.evaluate(c => ({ width: (c as HTMLCanvasElement).width, height: (c as HTMLCanvasElement).height }))).toEqual(size);
+  const faceZoom = Number(await zoom.inputValue());
+  await page.getByRole('button', { name: 'Upper body', exact: true }).click();
+  await expect.poll(async () => Number(await zoom.inputValue())).toBeLessThan(faceZoom);
+  const x = page.getByRole('slider', { name: 'Horizontal position', exact: true }), y = page.getByRole('slider', { name: 'Vertical position', exact: true });
+  const xBefore = Number(await x.inputValue()), yBefore = Number(await y.inputValue());
+  const rect = (await canvas.boundingBox())!;
+  await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2); await page.mouse.down();
+  await page.mouse.move(rect.x + rect.width / 2 + 80, rect.y + rect.height / 2 + 50); await page.mouse.up();
+  await expect.poll(async () => Number(await x.inputValue())).toBeGreaterThan(xBefore);
+  await expect.poll(async () => Number(await y.inputValue())).toBeGreaterThan(yBefore);
+  const dragged = Number(await x.inputValue()); await canvas.press('ArrowLeft');
+  await expect.poll(async () => Number(await x.inputValue())).toBeLessThan(dragged);
+  const previousZoom = Number(await zoom.inputValue()); await page.mouse.wheel(0, -150);
+  await expect.poll(async () => Number(await zoom.inputValue())).toBeGreaterThan(previousZoom);
+  const expected = { zoom: Number(await zoom.inputValue()), x: Number(await x.inputValue()), y: Number(await y.inputValue()) };
+  const url = await page.getByRole('textbox', { name: 'Copy OBS URL' }).inputValue();
+  const query = new URL(url).searchParams;
+  expect(Number(query.get('zoom'))).toBeCloseTo(expected.zoom, 2);
+  expect(Number(query.get('panX'))).toBeCloseTo(expected.x, 2);
+  await page.reload(); await expect(canvas).toHaveAttribute('data-state', 'ready');
+  expect(Number(await zoom.inputValue())).toBeCloseTo(expected.zoom, 2);
+  expect(Number(await x.inputValue())).toBeCloseTo(expected.x, 2);
+  expect(await unrelated.locator('body').getAttribute('data-wrong-project')).toBeNull();
+  await page.getByRole('button', { name: 'Reset view', exact: true }).click();
+  await expect(zoom).toHaveValue('1'); await expect(x).toHaveValue('0'); await expect(y).toHaveValue('0');
+  expect(outside).toEqual([]);
+});
+
+test('camera head nod changes the rendered avatar, calibrates and reverses independently of mirror', async ({ context, page }) => {
+  const outside = await guardNetwork(context); await syntheticMedia(page);
+  await context.route('**/mediapipe/vision_bundle.js', route => route.fulfill({ contentType: 'application/javascript', body: `
+    let pitch = 0, yaw = 0; const channel = new BroadcastChannel('test-head-nod'); channel.onmessage = e => { pitch = e.data.pitch; yaw = e.data.yaw; };
+    self.exports.FilesetResolver = { forVisionTasks: async () => ({}) };
+    self.exports.FaceLandmarker = { createFromOptions: async () => ({ close() { channel.close(); }, detectForVideo() {
+      const a = pitch * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+      const b = yaw * Math.PI / 180, cy = Math.cos(b), sy = Math.sin(b);
+      return { faceLandmarks: [[]], facialTransformationMatrixes: [{ data: [cy,0,-sy,0,sy*s,c,cy*s,0,sy*c,-s,cy*c,0,0,0,0,1] }], faceBlendshapes: [{ categories: [] }] };
+    } }) };` }));
+  await ready(page, '/live.html?idle=0');
+  await page.getByRole('button', { name: 'Face', exact: true }).click();
+  await page.getByRole('button', { name: 'Start camera', exact: true }).click();
+  await expect(page.getByTestId('tracking-status')).toHaveAttribute('data-state', 'tracking');
+  await page.getByRole('button', { name: 'Calibrate', exact: true }).click();
+  const nextPitch = () => page.evaluate(async () => {
+    const path = '/src/live/relay.ts'; const { receiveLiveParameters } = await import(path);
+    return new Promise<number>(resolve => { const off = receiveLiveParameters((data: { params: Record<string, number> }) => { off(); resolve(data.params.angleY); }); });
+  });
+  const nextYaw = () => page.evaluate(async () => {
+    const path = '/src/live/relay.ts'; const { receiveLiveParameters } = await import(path);
+    return new Promise<number>(resolve => { const off = receiveLiveParameters((data: { params: Record<string, number> }) => { off(); resolve(Math.abs(data.params.angleX)); }); });
+  });
+  const send = (pitch: number, yaw = 0) => page.evaluate(value => { const channel = new BroadcastChannel('test-head-nod'); channel.postMessage(value); channel.close(); }, { pitch, yaw });
+  const canvas = page.getByTestId('live-avatar'), hash = async () => createHash('sha256').update(await canvas.screenshot()).digest('hex');
+  await send(3, 30); await expect.poll(nextYaw).toBeGreaterThan(25);
+  await expect.poll(async () => Math.abs(await nextPitch())).toBeLessThan(0.5);
+  await send(10); await expect.poll(nextPitch).toBeLessThan(-15); const down = await hash();
+  await send(-10); await expect.poll(nextPitch).toBeGreaterThan(15); expect(await hash()).not.toBe(down);
+  await page.getByRole('checkbox', { name: 'Reverse head nod', exact: true }).check(); await expect.poll(nextPitch).toBeLessThan(-15);
+  await page.getByRole('checkbox', { name: 'Mirror', exact: true }).uncheck(); await expect.poll(nextPitch).toBeLessThan(-15);
+  await page.getByRole('button', { name: 'Calibrate', exact: true }).click(); await expect.poll(async () => Math.abs(await nextPitch())).toBeLessThan(1);
+  expect(outside).toEqual([]);
+});
 
 test('stream has actual alpha, exact green, no controls and no external requests', async ({ context, page }) => {
   const outside = await guardNetwork(context);
@@ -107,7 +187,7 @@ test('live controls calibrate, mirror, compose mic mouth, localize and relay wit
   await expect.poll(async () => (await nextParams()).angleX).toBeGreaterThan(15);
   await mic.check();
   await expect.poll(async () => (await nextParams()).mouthOpen).toBeGreaterThan(0.5);
-  expect((await nextParams()).mouthForm).toBeCloseTo(0.8, 1);
+  expect((await nextParams()).mouthForm).toBeCloseTo(1, 1);
   await mic.uncheck();
   await page.getByRole('button', { name: 'Calibrate', exact: true }).click();
   await expect(page.getByText('Neutral pose saved', { exact: true })).toBeVisible();
@@ -136,6 +216,59 @@ test('camera denial is explained without starting capture', async ({ page }) => 
   await page.getByRole('button', { name: 'Start camera', exact: true }).click();
   await expect(page.getByTestId('tracking-status')).toHaveAttribute('data-state', 'cameraBlocked');
   await expect(page.getByRole('button', { name: 'Start camera', exact: true })).toBeEnabled();
+});
+
+test('camera mouth opening and shape select different drawings with independent sensitivities', async ({ context, page }) => {
+  const outside = await guardNetwork(context);
+  await syntheticMedia(page);
+  await context.route('**/mediapipe/vision_bundle.js', route => route.fulfill({ contentType: 'application/javascript', body: `
+    let shapes = {};
+    const channel = new BroadcastChannel('test-mouth-shapes');
+    channel.onmessage = event => { shapes = event.data; };
+    self.exports.FilesetResolver = { forVisionTasks: async () => ({}) };
+    self.exports.FaceLandmarker = { createFromOptions: async () => ({ close() { channel.close(); }, detectForVideo() {
+      return { faceLandmarks: [[]], facialTransformationMatrixes: [{ data: [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1] }],
+        faceBlendshapes: [{ categories: Object.entries(shapes).map(([categoryName, score]) => ({ categoryName, score })) }] };
+    } }) };` }));
+  await ready(page, '/live.html');
+  const opening = page.getByRole('slider', { name: 'Mouth opening sensitivity', exact: true });
+  const form = page.getByRole('slider', { name: 'Mouth shape sensitivity', exact: true });
+  await expect(opening).toHaveValue('2'); await expect(form).toHaveValue('2');
+  await page.getByRole('slider', { name: 'Smoothing', exact: true }).press('Home');
+  await page.getByRole('button', { name: 'Start camera', exact: true }).click();
+  await expect(page.getByTestId('tracking-status')).toHaveAttribute('data-state', 'tracking');
+  await page.getByRole('button', { name: 'Calibrate', exact: true }).click();
+  const sendShapes = (shapes: Record<string, number>) => page.evaluate(shapes => {
+    const channel = new BroadcastChannel('test-mouth-shapes'); channel.postMessage(shapes); channel.close();
+  }, shapes);
+  const next = () => page.evaluate(async () => {
+    const path = '/src/live/relay.ts'; const { receiveLiveParameters } = await import(path);
+    return new Promise<Record<string, number>>(resolve => {
+      const off = receiveLiveParameters((data: { params: Record<string, number> }) => { off(); resolve(data.params); });
+    });
+  });
+  const hashes = [];
+  for (const [shapes, expectedForm, expectedOpen] of [
+    [{}, 0, 0],
+    [{ jawOpen: .35, mouthClose: .02 }, 0, .66],
+    [{ jawOpen: .25, mouthStretchLeft: .4, mouthStretchRight: .4 }, -.8, .5],
+    [{ jawOpen: .25, mouthFunnel: .3 }, .6, .5],
+  ] as const) {
+    await sendShapes(shapes);
+    await expect.poll(async () => (await next()).mouthForm).toBeCloseTo(expectedForm, 2);
+    await expect.poll(async () => (await next()).mouthOpen).toBeCloseTo(expectedOpen, 2);
+    const parameters = await next();
+    expect(parameters.eyeLOpen).toBe(1); expect(parameters.angleX).toBe(0);
+    hashes.push(createHash('sha256').update(await page.getByTestId('live-avatar').screenshot()).digest('hex'));
+  }
+  expect(new Set(hashes).size).toBe(4);
+  await sendShapes({ jawOpen: .35, mouthStretchLeft: .4, mouthStretchRight: .4 });
+  await opening.press('Home');
+  await expect.poll(async () => (await next()).mouthOpen).toBeCloseTo(.175, 2);
+  await expect.poll(async () => (await next()).mouthForm).toBeCloseTo(-.8, 2);
+  await form.press('Home');
+  await expect.poll(async () => (await next()).mouthForm).toBeCloseTo(-.2, 2);
+  expect(outside).toEqual([]);
 });
 
 test('real tracking runtime loads its model and WASM locally with synthetic video only', async ({ context, page }) => {

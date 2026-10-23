@@ -1,4 +1,4 @@
-import { createMeshAvatar, loadMeshAvatar, type MeshAvatar, PARAMS } from 'mesh-avatar';
+import { createMeshAvatar, loadMeshAvatar, type MeshAvatar, type Rig, PARAMS } from 'mesh-avatar';
 import { localProjects, openLocalProject, openSampleAvatar } from '../editor/project';
 import { SAMPLE_PROJECT, type ViewSettings } from './settings';
 
@@ -8,13 +8,14 @@ export async function createAvatarView(canvas: HTMLCanvasElement, settings: View
   beforeFrame?: (avatar: MeshAvatar, now: number, dt: number) => void,
   afterFrame?: (avatar: MeshAvatar, now: number) => void) {
   canvas.dataset.state = 'loading';
-  const options = { manual: true, fit: settings.fit, preserveMouthForm: true };
-  let avatar: MeshAvatar;
-  if (settings.avatar) avatar = await loadMeshAvatar(canvas, settings.avatar, options);
+  const options = { manual: true, fit: settings.fit, preserveMouthForm: true, viewport: settings.viewport };
+  let avatar: MeshAvatar, rig: Rig;
+  if (settings.avatar) { const loaded = await loadMeshAvatar(canvas, settings.avatar, options); avatar = loaded; rig = loaded.package.rig; }
   else {
     const projects = await localProjects(), project = projects?.find(entry => entry.name === settings.project);
     if (project?.error || (!project && settings.project !== SAMPLE_PROJECT)) throw new Error('Project unavailable');
     const loaded = project ? await openLocalProject(project) : await openSampleAvatar();
+    rig = loaded.rig!;
     avatar = await createMeshAvatar(canvas, { ...options, rig: loaded.rig!, assets: loaded.assets });
   }
   if (settings.lighting) avatar.setLighting(settings.lighting);
@@ -34,7 +35,7 @@ export async function createAvatarView(canvas: HTMLCanvasElement, settings: View
   };
   const frame = (now: number) => { lastPaint = now; update(now); raf = requestAnimationFrame(frame); };
   raf = requestAnimationFrame(frame);
-  return { avatar, timing,
+  return { avatar, rig, timing,
     paintPaused(now: number) { return now - lastPaint > 1000; },
     updateIfStalled(now: number) { if (now - previous >= 1000 / 30 - 2) update(now, false); },
     destroy() { cancelAnimationFrame(raf); avatar.destroy(); } };

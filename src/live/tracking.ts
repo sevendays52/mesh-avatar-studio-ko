@@ -6,12 +6,18 @@ export interface FaceResult {
   faceBlendshapes: { categories: { categoryName: string; score: number }[] }[];
   facialTransformationMatrixes: { data: number[] }[];
 }
-export interface RawFace { yaw: number; pitch: number; roll: number; shapes: Record<string, number> }
-export interface TrackingOptions { mirror: boolean; sensitivity: number; smoothing: number }
+export interface RawFace { yaw: number; pitch: number; roll: number; shapes: Record<string, number>; rotation?: number[] }
+export interface TrackingOptions {
+  mirror: boolean; sensitivity: number; smoothing: number;
+  mouthSensitivity?: number;
+  mouthShapeSensitivity?: number;
+  pitchSensitivity?: number;
+  invertPitch?: boolean;
+}
 export const clamp = (value: number, min = 0, max = 1) => Math.max(min, Math.min(max, Number.isFinite(value) ? value : min));
 export const faceNeutral: Record<string, number> = {
-  angleX: 0, angleY: 0, angleZ: 0, bodyAngleX: 0, bodyAngleZ: 0,
-  eyeLOpen: 1, eyeROpen: 1, gazeX: 0, gazeY: 0, mouthOpen: 0, mouthForm: 0, browY: 0, eyeSmile: 0, eyeSmileL: 0,
+  angleX: 0, angleY: 0, angleZ: 0, bodyAngleX: 0, bodyAngleY: 0, bodyAngleZ: 0,
+  eyeLOpen: 1, eyeROpen: 1, gazeX: 0, gazeY: 0, mouthOpen: 0, mouthForm: 0, cheekPuff: 0, browY: 0, eyeSmile: 0, eyeSmileL: 0,
 };
 export function readFace(result: FaceResult): RawFace | null {
   const matrix = result.facialTransformationMatrixes[0]?.data;
@@ -26,29 +32,59 @@ export function readFace(result: FaceResult): RawFace | null {
   const degrees = 180 / Math.PI;
   return { yaw: Math.atan2(m[8], m[10]) * degrees, pitch: Math.asin(clamp(-m[9], -1, 1)) * degrees,
     roll: Math.atan2(m[1], m[5]) * degrees,
-    shapes: Object.fromEntries((result.faceBlendshapes[0]?.categories ?? []).map(shape => [shape.categoryName, clamp(shape.score)])) };
+    shapes: Object.fromEntries((result.faceBlendshapes[0]?.categories ?? []).map(shape => [shape.categoryName, clamp(shape.score)])),
+    rotation: [m[0], m[1], m[2], m[4], m[5], m[6], m[8], m[9], m[10]] };
 }
 const angleDelta = (value: number, neutral: number) => ((value - neutral + 540) % 360) - 180;
+export function relativeFaceAngles(face: RawFace, neutral: RawFace | null) {
+  if (!face.rotation || !neutral?.rotation) return {
+    yaw: angleDelta(face.yaw, neutral?.yaw ?? 0), pitch: angleDelta(face.pitch, neutral?.pitch ?? 0),
+    roll: angleDelta(face.roll, neutral?.roll ?? 0),
+  };
+  // Remove the calibrated camera orientation before decomposing it. Subtracting
+  // Euler angles mixes axes when the neutral head is already tilted or pitched.
+  const a = face.rotation, b = neutral.rotation;
+  const r = Array.from({ length: 9 }, (_, i) => {
+    const row = i % 3, col = Math.floor(i / 3);
+    return a[row] * b[col] + a[row + 3] * b[col + 3] + a[row + 6] * b[col + 6];
+  });
+  const degrees = 180 / Math.PI;
+  return { yaw: Math.atan2(r[6], r[8]) * degrees, pitch: Math.asin(clamp(-r[7], -1, 1)) * degrees,
+    roll: Math.atan2(r[1], r[4]) * degrees };
+}
+export function intentionalPitch(pitch: number, yaw: number) {
+  // Camera fits drift a few degrees as the nose turns away. Keep that noise out
+  // of the drawn-view selector; full nods retain their original amplitude.
+  const start = 2 + Math.min(60, Math.abs(yaw)) * 0.05;
+  const t = clamp((Math.abs(pitch) - start) / 3);
+  if (t === 0) return 0;
+  return pitch * t * t * (3 - 2 * t);
+}
 export function mapFace(face: RawFace, neutral: RawFace | null, options: TrackingOptions): Record<string, number> {
   const s = (key: string) => face.shapes[key] ?? 0;
   const n = (key: string) => neutral?.shapes[key] ?? 0;
   const d = (key: string) => s(key) - n(key);
   const mean = (a: string, b: string) => (d(a) + d(b)) / 2;
   const mirror = options.mirror ? -1 : 1, gain = clamp(options.sensitivity, 0.25, 2);
-  const x = clamp(angleDelta(face.yaw, neutral?.yaw ?? 0) * gain * mirror, -30, 30);
-  const y = clamp(angleDelta(face.pitch, neutral?.pitch ?? 0) * gain, -30, 30);
-  const z = clamp(angleDelta(face.roll, neutral?.roll ?? 0) * gain * mirror, -30, 30);
+  const mouthGain = gain * clamp(options.mouthSensitivity ?? 1, 0.5, 4);
+  const mouthShapeGain = gain * clamp(options.mouthShapeSensitivity ?? 1, 0.5, 4);
+  const rotation = relativeFaceAngles(face, neutral);
+  const x = clamp(rotation.yaw * gain * mirror, -30, 30);
+  // Camera X rotation is positive for a downward nod; the avatar looks down at negative angleY.
+  const y = clamp(intentionalPitch(rotation.pitch, rotation.yaw) * gain * clamp(options.pitchSensitivity ?? 1, 0.5, 4) * (options.invertPitch ? 1 : -1), -30, 30);
+  const z = clamp(rotation.roll * gain * mirror, -30, 30);
   const open = (side: string) => {
     const blink = s(`eyeBlink${side}`);
     return blink >= 0.85 ? 0 : clamp((1 - blink) / Math.max(0.2, 1 - n(`eyeBlink${side}`)), 0, 1.25);
   };
   const smile = clamp((mean('mouthSmileLeft', 'mouthSmileRight') + mean('cheekSquintLeft', 'cheekSquintRight')) * 0.3);
-  return { angleX: x, angleY: y, angleZ: z, bodyAngleX: x * 0.2, bodyAngleZ: z * 0.2,
+  return { angleX: x, angleY: y, angleZ: z, bodyAngleX: x * 0.2, bodyAngleY: y * 0.2, bodyAngleZ: z * 0.2,
     eyeLOpen: open(options.mirror ? 'Right' : 'Left'), eyeROpen: open(options.mirror ? 'Left' : 'Right'),
     gazeX: clamp((d('eyeLookOutRight') - d('eyeLookInRight') + d('eyeLookInLeft') - d('eyeLookOutLeft')) * mirror, -1, 1),
     gazeY: clamp(mean('eyeLookUpLeft', 'eyeLookUpRight') - mean('eyeLookDownLeft', 'eyeLookDownRight'), -1, 1),
-    mouthOpen: clamp((d('jawOpen') - Math.max(0, d('mouthClose'))) * gain / Math.max(0.2, 1 - n('jawOpen'))),
-    mouthForm: clamp((d('mouthPucker') + d('mouthFunnel') - mean('mouthSmileLeft', 'mouthSmileRight') - mean('mouthStretchLeft', 'mouthStretchRight')) * gain, -1, 1),
+    mouthOpen: clamp((d('jawOpen') - Math.max(0, d('mouthClose'))) * mouthGain / Math.max(0.2, 1 - n('jawOpen'))),
+    mouthForm: clamp((d('mouthPucker') + d('mouthFunnel') - mean('mouthSmileLeft', 'mouthSmileRight') - mean('mouthStretchLeft', 'mouthStretchRight')) * mouthShapeGain, -1, 1),
+    cheekPuff: clamp(Math.max(0, d('cheekPuff') - 0.03) * gain * 1.8 / Math.max(0.2, 1 - n('cheekPuff'))),
     browY: clamp((d('browInnerUp') + mean('browOuterUpLeft', 'browOuterUpRight') - mean('browDownLeft', 'browDownRight')) * gain, -1, 1),
     eyeSmile: smile, eyeSmileL: smile };
 }
@@ -75,7 +111,11 @@ export class FacePose {
   sample(now: number, dt: number, options: TrackingOptions) {
     const tracking = !!this.face && now - this.seen <= 500;
     const target = tracking ? mapFace(this.face!, this.neutral, options) : faceNeutral;
-    this.params = smoothParameters(this.params, target, dt, tracking ? options.smoothing : 0.7);
+    const previous = this.params;
+    this.params = smoothParameters(previous, target, dt, tracking ? options.smoothing : 0.7);
+    // The torso follows rather than snapping to the face's current orientation.
+    const body = smoothParameters(previous, target, dt, tracking ? Math.max(0.6, options.smoothing) : 0.7);
+    for (const key of ['bodyAngleX', 'bodyAngleY', 'bodyAngleZ']) this.params[key] = body[key];
     if (tracking) for (const eye of ['eyeLOpen', 'eyeROpen']) if (target[eye] === 0) this.params[eye] = 0;
     this.weight = tracking ? 1 : this.weight * Math.exp(-dt / 0.2);
     if (this.weight < 0.005) this.weight = 0;

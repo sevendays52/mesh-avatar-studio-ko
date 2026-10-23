@@ -180,6 +180,19 @@ Two pages served by the development server (`npm run dev`):
   microphone controls, face tracking, calibration and the stream URL.
 - **Stream view** (`/stream.html`): only the avatar, for OBS or other capture software.
 
+**Framing** chooses between **Fit whole avatar** and **Fill frame**. Fill frame crops the
+avatar to fill the canvas and can cut off the head of a tall, full-body illustration.
+Use **Avatar framing → Face** or **Upper body** to centre the corresponding part of the
+rig. **Zoom** (25%–800%), **Horizontal position** and **Vertical position** refine the view;
+**Reset view** restores 100% and zero offsets for the selected Framing mode.
+Scroll over the preview to zoom about the pointer, and drag it to move the avatar.
+With the preview focused, arrow keys move it (Shift for a larger step), and + / − zoom.
+These controls keep the canvas resolution fixed and render the enlarged mesh directly.
+Zoom and position are saved per project in this browser. Explicit URL values override the
+saved values. Open stream views for the same project follow changes; copied OBS URLs also
+include the current zoom and position. For the closest crop match, use the same aspect ratio
+in Live and OBS. Lighting handles remain independently draggable.
+
 ### Stream view URL
 
 | Parameter | Values | Default |
@@ -188,6 +201,8 @@ Two pages served by the development server (`npm run dev`):
 | `avatar` | A folder or `.mavatar` URL on the same origin as the local development server; an explicit `project` takes precedence | unset |
 | `bg` | `transparent`, `green`, `blue` or a hex colour such as `#336699` | `transparent` |
 | `fit` | `contain` (whole avatar) or `cover` (fill the frame) | `contain` |
+| `zoom` | Avatar magnification, `0.25`–`8` | `1` |
+| `panX`, `panY` | Horizontal/vertical offset in canvas widths/heights, `-4`–`4`; positive right/down | `0`, `0` |
 | `idle` | `1` (idle motion, blinking, breathing, hair sway) or `0` | `1` |
 | `light` | `1` enables [lighting](#lighting); omit it for no lighting | off |
 | `lx`, `ly` | Light position across and down the frame, `0`–`1` | `0.2`, `0.2` |
@@ -227,6 +242,17 @@ trigger external requests. If `project` is present, `avatar` is ignored.
   warm-up.
 - With the microphone on, the voice level drives how far the mouth opens and the camera keeps
   the mouth shape. Drawn mouth images are used automatically when the project has them.
+- **Head nod sensitivity** scales up/down head rotation separately from yaw, roll and facial
+  expressions. It defaults to 2×, adjustable from 0.5× to 4× relative to general sensitivity.
+  Calibrate looking straight ahead, then look up and down. **Reverse head nod** flips the
+  vertical direction independently of Mirror. Tracking remains limited to the rig's 2D
+  pitch deformation; it does not generate unseen views or track forward/backward body travel.
+- **Mouth opening sensitivity** and **Mouth shape sensitivity** adjust the camera's mouth
+  response separately from eyes and head movement. Both default to 2×, with a 0.5×–4× range,
+  relative to the general sensitivity. Calibrate with closed lips, then try an open “a”,
+  a wide “i” and a rounded “o”. Lower the corresponding gain if movement is exaggerated,
+  or raise it if the drawing barely changes. These values last for the current Live page.
+  The microphone measures volume; it does not recognize spoken vowels.
 
 ### Expressions
 
