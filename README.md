@@ -1,209 +1,142 @@
-# Mesh Avatar Studio
+# Mesh Avatar Studio KO
 
-[日本語](README.ja.md)
+**한국어** · [English](README.en.md) · [日本語](README.ja.md)
 
-Turn a single illustration into an animated 2D mesh avatar: it blinks, talks, turns its head,
-breathes and sways its hair. A coding agent prepares the avatar from your image; you fine-tune
-it in a local editor with a live preview.
+[원본 Mesh Avatar Studio](https://github.com/shinshin86/mesh-avatar-studio)의 비공식 포크입니다. 한국어 UI와 아바타 움직임 확장, Codex를 이용한 제작·검토 흐름을 제공합니다. 원본 개발자는 **Yuki Shindo (shinshin86)**이며, 이 포크는 [sevendays52/mesh-avatar-studio-ko](https://github.com/sevendays52/mesh-avatar-studio-ko)에서 별도로 관리합니다.
 
-See it move on the [landing page](https://shinshin86.github.io/mesh-avatar-studio/).
-To move it with your own face and voice without installing anything, open the
-[Player](https://shinshin86.github.io/mesh-avatar-studio/play/) in Chrome or Edge.
+한 장의 일러스트를 눈 깜박임·입 모양·고개 회전·호흡·머리카락 흔들림이 있는 2D 메쉬 아바타로 만들고, 로컬 편집기에서 조정할 수 있습니다.
 
-![The editor with the Miko sample](docs/images/en/01-overview.png)
+![Miko 샘플을 연 편집기 — 원본의 영어 UI 예시](docs/images/en/01-overview.png)
 
-## Try the sample
+## 원본과 포크의 차이
 
-Requires Node.js 22.17+ and Git.
+기본 편집기, WebGL 엔진, 표정·립싱크, 카메라 추적, 조명, `.mavatar` 공유는 원본의 기능입니다. 이 포크는 다음을 추가하거나 개선합니다.
+
+| 영역 | 이 포크의 변경 사항 |
+|---|---|
+| 한국어 | 편집기, Live, 조명, 가져오기·내보내기, 에이전트 요청문, 환경 점검의 한국어 안내. 영어·일본어와 기존 중국어 UI도 유지합니다. |
+| 고개·상체 | 선택적 리그 데이터로 목 중심 끄덕임, 얼굴 비율 보존, 상체 따라 움직임을 적용합니다. |
+| 각도별 원화 | 별도 숙임 원화와 해당 리그를 연결하고, 대응 격자가 있으면 원화 사이를 변형·블렌딩합니다. 추가 원화와 설정이 필요합니다. |
+| 얼굴 추적 | 정면 교정 기준 상대 회전, 끄덕임 방향·감도·반전, 입 벌림·입 모양 감도를 조정합니다. |
+| 볼·미리보기 | 볼 부풀림과 입 모양·상체 끄덕임 테스트를 제공합니다. 볼 변형에는 리그 설정이 필요합니다. |
+| 방송 구도 | Live에서 확대·축소·위치를 조절하고 OBS 스트림 화면에 같은 구도를 전달합니다. |
+| 제작 도구 | 추가 리그·원화 데이터 검증, 스프라이트 재빌드 시 원화 데이터 보존, 포즈 검토와 회귀 테스트를 확장합니다. |
+
+새 리그·스프라이트 데이터는 선택 사항입니다. 해당 데이터가 없는 기존 아바타의 변형은 그대로 유지하며 공개 런타임 API와 기존 형식의 의미를 보존합니다. 구형 런타임에서는 새 효과가 표시되지 않을 수 있습니다. 중간 각도에서는 원화의 선·명암 차이로 선이 부드럽거나 겹쳐 보일 수 있습니다.
+
+이 포크의 한국어 지원 범위는 로컬 Studio와 Live입니다. 상세 기술 문서와 별도 소개 사이트·Player에는 영어·일본어 자료가 남아 있습니다. [원본 소개 사이트](https://shinshin86.github.io/mesh-avatar-studio/)와 [원본 Player](https://shinshin86.github.io/mesh-avatar-studio/play/)는 원본 서비스이며 이 포크의 추가 기능을 포함하지 않습니다.
+
+## 설치와 실행
+
+### Windows 실행파일로 시작
+
+처음 clone한 뒤 저장소 폴더에서 Codex에 **“실행 준비해줘”**라고 요청하면 됩니다.
+Codex는 `AGENTS.md`에 따라 필요한 환경과 패키지를 확인하고 실행파일·런타임을 빌드합니다.
+그다음부터는 아래 실행파일을 더블클릭해 사용합니다.
+
+이 작업 폴더의 **`MeshAvatarStudio.exe`를 더블클릭**하면 로컬 서버와 브라우저가 열립니다.
+실행파일은 저장소 폴더 안에 두고 `tools/launcher-runtime/`도 함께 유지하세요. 함께 준비된
+Node.js·npm을 사용하며, 패키지가 없으면 첫 실행에서 자동 설치합니다(인터넷 연결 필요).
+실행 창을 닫거나 **종료 / Stop Studio**를 누르면 서버도 종료됩니다. 편집·Live·OBS 사용 중에는
+이 창을 켜 두세요. 이미 실행 중이면 다시 실행해 브라우저를 열 수 있습니다.
+
+브라우저에서 **프로젝트 선택 → 새 프로젝트 만들기 → 이미지 선택 → 프로젝트 만들기**를
+진행합니다. 이미지가 저장되면 Codex 안내 화면으로 넘어갑니다. **저장소 폴더 경로 복사**로
+해당 폴더에서 Codex를 열고 **Codex 요청문 복사**를 붙여 넣으세요. 페이지는 리그·레이어 제작
+완료를 확인하며, 준비되면 **완성된 아바타 열기**를 누를 수 있습니다. 제작 대기 프로젝트는
+목록에서 다시 열 수 있습니다. PNG 원본은 그대로 보존하고 JPEG·WebP는 로컬에서 PNG로 변환합니다.
+
+실행파일과 포함된 런타임은 로컬 빌드 결과이며 Git에 포함하지 않습니다. 새로 clone한 폴더에서
+실행파일을 만들려면 Node.js·npm이 설치된 Windows에서 한 번 실행하세요:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-launcher.ps1
+```
+
+이 명령은 Windows 기본 C# 컴파일러로 실행파일을 만들고 설치된 Node.js·npm을 로컬 런타임으로
+복사합니다. 실행파일만 빌드하려면 `-WithoutRuntime`을 사용하세요(실행할 PC에 Node.js 필요).
+이미지 인식·리그 제작은 Codex에서 진행하며, Python·uv·Chromium 등 제작 도구는 별도 준비합니다.
+
+### 터미널에서 실행
+
+Node.js **22.17 이상**과 Git이 필요합니다. 레이어 제작·재생성에는 **Python 3.10 이상과 uv**, 포즈 이미지 검토에는 **Playwright Chromium**도 필요합니다.
 
 ```sh
-npx create-mesh-avatar-studio
-cd mesh-avatar-studio
+git clone https://github.com/sevendays52/mesh-avatar-studio-ko.git
+cd mesh-avatar-studio-ko
+npm ci
+node tools/doctor.mjs --lang ko
 npm run dev
 ```
 
-The first command downloads the repository, installs its packages and checks the tools
-Studio needs. If you cloned the repository yourself, run `npm install`, then
-`npm run doctor` for the same check. Only Node.js is needed for the editor and the Live
-page. uv and Python rebuild layers, and Playwright Chromium renders the motion review when
-an agent creates an avatar; the check warns about each one that is missing.
+터미널에 표시된 주소(예: `http://127.0.0.1:5173/`)를 열고 상단에서 **한국어**를 선택하세요. 언어 선택은 브라우저에 저장됩니다. 처음에는 Miko 샘플이 열립니다. 샘플 수정 시 **복사하고 편집 계속**을 선택하면 `projects/`의 사본으로 작업합니다.
 
-Open the URL printed in the terminal (for example `http://127.0.0.1:5173/`). The editor opens
-the bundled sample, Miko in a qipao. Pick a part on the left, drag its dots on the image and
-watch the preview on the right. The sample is read-only; when you change it, choose
-**Copy and keep editing** to continue in your own copy.
+제작 도구가 없다면 먼저 uv를 설치한 뒤 다음을 실행하세요. 설치 상태는 `node tools/doctor.mjs --lang ko`로 다시 확인할 수 있습니다.
 
-### Using Windows
+```sh
+uv python install 3.12
+npx playwright install chromium
+```
 
-Use `git clone` to download the repository when possible. If you use a ZIP, open its
-Properties in File Explorer and select **Unblock**, if shown, before extracting it.
+`npx create-mesh-avatar-studio`는 **원본 저장소**를 설치합니다. 이 포크를 사용하려면 위의 `git clone` 절차를 따르세요. Windows에서는 가능하면 Git으로 내려받고, 에이전트 작업 전에 본인 계정으로 `projects/` 폴더를 만들어 두세요. 접근 오류가 나면 폴더의 **속성 → 보안**에서 하위 파일까지 권한이 상속되는지 확인하세요.
 
-Create `projects/` yourself under your Windows account before asking an agent to work in it
-(`npx create-mesh-avatar-studio` creates it for you).
-Folders created by another account or an agent running in a sandbox can have permissions
-that prevent the editor from reading them. If a project cannot be read, use the folder's
-**Properties → Security** settings to grant your account access to the whole project,
-including its files and subfolders through permission inheritance.
+## Codex로 아바타 만들기
 
-## How it works
+Studio의 **에이전트에게 요청** 기능은 작업 요청문을 만들어 복사합니다. Codex를 자동 실행하거나 이미지 생성 API를 직접 호출하지는 않습니다. 저장소 폴더에서 실행하는 이미지 인식 가능한 코딩 에이전트가 로컬 제작 도구를 사용합니다. 별도의 Codex Skill 설치나 모델 재학습은 제공하지 않습니다.
 
-Making an avatar from your own illustration takes four steps. Steps 1 and 4 are done by a
-coding agent (Claude Code or Codex) working in this repository; steps 2 and 3 happen in the
-editor.
+1. 실행파일로 연 화면에서 **새 프로젝트 만들기**로 이미지를 선택하고 Codex 요청문을 복사하세요. 직접 준비한다면 원본 이미지를 `projects/<이름>/` 아래에 보관하고 다음처럼 요청합니다.
 
-### 1. Ask your agent to create the avatar
+   > docs/agent-guide.md를 순서대로 따라 projects/my-avatar/source.png로 아바타를 만들어 줘. 좌표 교정, 확대 격자, 리그 오버레이, 검증, 레이어 빌드와 포즈 이미지 육안 검토까지 진행하고 남은 결함도 알려 줘.
 
-Open Claude Code or Codex in this repository folder and give it your illustration:
+2. 완성된 프로젝트를 **프로젝트 열기**에서 선택합니다. **포즈 테스트**와 **입 모양 테스트**로 확인하고, 왼쪽 부위와 이미지 위 점을 조절합니다. 눈·손 윤곽처럼 레이어에 영향을 주는 값을 바꾸면 **저장하고 레이어 다시 만들기**를 실행합니다.
+3. **표정 그림**에서 눈·입·표정을 선택하고 Codex용 요청문을 복사합니다. 이미지 생성 기능이 있는 환경에서는 원본과 마스크를 이용해 그림을 만들고 가져올 수 있습니다. 이미지 전송은 사용자의 명시적 허용 후에만 진행합니다. 이미지 생성이 없는 환경에서는 로컬 마스크·프롬프트를 준비하고 직접 준비한 PNG를 가져오세요.
+4. 각도별 원화는 별도 고급 작업입니다. [추가 기능 제작 가이드](docs/fork-workflows.md)에 따라 원화별 리그와 스프라이트를 준비하고 전환을 검토하도록 요청하세요. 눈·입 그림 요청만으로 각도별 원화가 자동 생성되지는 않습니다.
 
-> Create an avatar from this image following docs/agent-guide.md: `/path/to/your-image.png`
+정면에 가까운 상반신 PNG와 투명 배경이 가장 적합합니다. 이미지마다 리그·마스크·원화 정렬을 조정해야 하므로 모든 그림의 품질이 자동으로 보장되지는 않습니다. 전체 순서는 [에이전트 가이드](docs/agent-guide.md), 필드 의미는 [리그 필드](docs/rig-fields.md)를 참고하세요.
 
-The agent follows [the agent guide](docs/agent-guide.md): it checks how accurately it reads
-coordinates, places the rig on zoomed grids, cuts the image into layers and reviews the
-avatar in fixed poses. The project is saved in `projects/<name>/`, which is never committed.
-Best results come from a front-facing, head-and-shoulders PNG with a transparent background.
-When no project is open, the editor shows this request ready to copy.
+문장을 입력하는 입 모양 미리보기는 현재 일본어 히라가나·가타카나만 지원하며 소리를 재생하지 않습니다. 한국어 UI에서 모음 버튼과 카메라·마이크 기반 입 움직임은 사용할 수 있습니다.
 
-![The request for a new avatar](docs/images/en/06-new-project.png)
+## Live와 OBS
 
-Recommended setups:
+프로젝트에서 **Live**를 열고 카메라를 시작한 뒤 정면·편안한 눈·닫힌 입 상태로 교정하세요. 반전·감도·부드러움, 입 모양, 화면 구도와 조명을 조정할 수 있습니다. 마이크만 사용하면 대기 동작에 음성 입 움직임을 더할 수 있습니다.
 
-| Agent | Model |
-|---|---|
-| Claude Code | Claude Opus 5.5 |
-| Codex | GPT-6.1 Sol |
+**OBS URL 복사**로 얻은 주소를 OBS의 브라우저 소스(예: 1080 × 1080)에 넣고 Live 페이지와 개발 서버를 계속 켜 두세요. 투명 배경을 사용할 수 있습니다. 카메라 영상과 마이크 음성은 로컬에서 처리하며, 스트림에는 수치 형태의 움직임과 표시 설정을 전달합니다. Live를 별도 창에 두고 추적이 느려졌다는 안내가 나오면 창을 앞으로 가져오세요. 자세한 사용법은 [참고 문서](docs/reference.md#live-and-streaming)에 있습니다.
 
-### 2. Open the project and check it
+## 저장·공유와 개인정보
 
-Start the editor (`npm run dev`), choose **Open project** and pick your project from the list.
-In the preview, use **Pose test** to turn and tilt the head and close the eyes, and
-**Lip sync** to check the vowel mouth shapes.
+**리그 저장**은 설정을 저장하고, **.mavatar 내보내기**는 저장된 리그·레이어·표정·메타데이터를 한 파일로 묶습니다. 편집하려면 원본 이미지를 포함해야 합니다. 원본을 제외해도 생성된 레이어 이미지가 들어 있으므로 이미지 자체가 비공개 처리되는 것은 아닙니다. 가져오기는 개발 서버에서 최대 128 MiB까지 지원합니다.
 
-![Lip sync check](docs/images/en/03-lip-sync.png)
+사용자 이미지와 모든 파생물은 무시된 `projects/` 안에만 두고 커밋·업로드하지 마세요. 외부 이미지 생성에 보낼 때는 먼저 허용을 받으세요. `samples/`와 `reference/`는 수정하지 않습니다. 코드의 MIT 라이선스가 개별 이미지의 이용·배포 권한을 주지는 않습니다.
 
-### 3. Fix what looks wrong by dragging
+## 개발과 검증
 
-Select a part on the left. Its dots are highlighted on the image; drag them to fix the
-placement. The preview follows your changes immediately. Some values also decide how the image
-is cut into layers: eye and hand outlines, and the head, hair and bun areas used for the hair
-mask. After changing those, a banner appears; choose **Save and rebuild layers** there. It takes
-a few seconds.
+```sh
+npm run lint
+npm test
+npm run build
+npm run build:runtime
+npm run build:element
+npm run build:react
+npm run build:site
+npm run e2e
+uv run --with numpy --with pillow --with opencv-python-headless tools/test_build_layers.py
+uv run tools/test_agent_tools.py
+```
 
-![Editing the eye outline](docs/images/en/02-edit-handles.png)
+기존 변형의 수치 회귀는 **0px**를 유지해야 합니다(물리는 부동소수점 허용 오차). 아바타 빌드 전에는 `npm run validate-rig -- projects/<이름>/rig.draft.json`, 빌드 후에는 `npm run render-poses -- projects/<이름>`을 실행하고 결과를 직접 확인하세요. 새 효과는 해당 데이터를 설정한 프로젝트로도 검토해야 합니다.
 
-![Rebuilding layers after changing an outline](docs/images/en/04-rebuild.png)
+`packages/` 변경에는 changeset을 추가합니다(기능 minor, 수정 patch). 루트 Studio만 변경하면 필요 없습니다. 패키지 이름은 원본과 공유하므로 이 포크의 npm 배포에는 별도 이름과 배포 설정이 필요합니다. 원본의 자동 npm 릴리스는 원본 저장소에서만 실행하도록 제한합니다.
 
-Zoom with a pinch or Ctrl/Cmd+scroll, pan with two fingers or by dragging empty space, and use
-**Fit selected part** to jump to the current part.
+- [추가 기능 제작 가이드](docs/fork-workflows.md)
+- [에이전트 가이드](docs/agent-guide.md)
+- [참고 문서](docs/reference.md)
+- [리그 필드](docs/rig-fields.md)
+- [아바타 형식](docs/format.md)
 
-### 4. Get drawn eyes and mouths
+## 라이선스와 출처
 
-Without drawings, the eyes and mouth move by mesh deformation alone. Drawn closed eyes and
-vowel mouths make blinking and talking look much more natural. In **Drawn variants**, check
-**Eyes**, **Mouth** or both, copy the message and paste it into Codex opened in this
-repository folder. Codex draws them with its built-in image generation and imports them; the
-editor reloads them automatically. (Claude Code cannot generate images; its message prepares
-the masks and prompts for you to hand to an image generator.)
+코드: [MIT](LICENSE), 원본 Copyright (c) 2026 Yuki Shindo. 재배포 시 원본 저작권·허가 고지를 유지하세요.
 
-**Expressions** is optional: it adds drawn sad and surprised eyes and closed angry and sad
-mouths. The avatar switches to them for those expressions and emotion tags and still blinks
-and speaks; avatars without them look the same as before.
+샘플 Miko(`samples/miko-qipao/`)는 MIT 대상이 아닙니다. © Yuki Shindo (AITuber OnAir). [Miko 이용 규약](https://miko.aituberonair.com/#terms)과 [샘플 이용 조건](samples/miko-qipao/MIKO_ASSET_TERMS.md)을 따르며, 이미지 단독·소재 모음 재배포는 허용되지 않습니다. 이 프로젝트는 공식 AITuber OnAir 제품이 아닙니다.
 
-![Requesting drawn mouths](docs/images/en/05-variants.png)
-
-## Share your avatar
-
-Choose **Export .mavatar** in the editor to download one file containing the saved rig,
-built layers, drawn expressions and avatar metadata. **Include source image** is on by
-default so the recipient can edit it in Studio. If you have unsaved edits, use **Save and
-export**; changed outlines need a layer rebuild first. Read-only views export the original files.
-
-In **Open project**, choose **Import .mavatar** or drop the file there. Studio creates a new
-folder under `projects/`, using a new name if one already exists. Import requires `npm run dev`
-and accepts archives up to 128 MiB. Without the source image, the imported avatar can play but
-cannot be edited or rebuilt. Omitting the source does not remove the built images.
-See the [avatar format](docs/format.md) for the file contents.
-
-## Live and streaming
-
-![The Live page](docs/images/en/07-live.png)
-
-Open your project in the editor and choose **Live**. Start the camera, face forward with
-relaxed eyes and a closed mouth, then choose **Calibrate**. You can adjust mirroring,
-sensitivity and smoothing, or enable microphone lip sync. Camera video and microphone
-audio stay on your machine; only numeric avatar motion values reach the stream view.
-
-Choose a background and **Copy OBS URL**, or **Open stream view in a new tab** to check it first. Keep the Live page open and add the URL as an
-OBS **Browser Source**, for example at **1080 × 1080**. The transparent background works
-directly in OBS. For other capture software, choose green and apply a chroma key.
-Both pages use the local development server (`npm run dev`). The stream view shows idle
-motion when the Live page stops sending updates.
-
-Optional **Lighting** adds shading that follows a light you drag over the avatar. It is off
-by default; open its section near the bottom of the Live page, or below the preview in the
-editor. The OBS URL includes the lighting settings. See [Lighting](docs/reference.md#lighting).
-
-Keep the Live page open in its own window. Open the OBS URL inside OBS or in another
-tab; do not paste it into the tab running Live. If the page reports that tracking has
-stopped or slowed while hidden, bring its window to the front.
-
-![The stream view with a green background](docs/images/en/08-stream.png)
-
-Switch expressions such as a smile, surprise or a wink with the **Expression** buttons or
-keys **1**–**8** while tracking continues. A Stream Deck button or a keyboard shortcut can
-switch them while another app such as OBS is in front; macOS Shortcuts keys do not work in
-every app ([details](docs/reference.md#switching-expressions-from-other-apps)).
-
-Save up to eight lighting setups, such as a red light from below for a horror game, as
-presets, and switch them with **Shift**+**1**–**8** or the same kind of shortcut
-([details](docs/reference.md#lighting-presets)).
-
-The camera is optional: with only the microphone on, the avatar keeps its idle motion and
-your voice moves the mouth. To appear as the avatar in Zoom, Google Meet and similar apps, use
-OBS's Virtual Camera ([steps](docs/reference.md#video-calls)).
-
-Stream view options, troubleshooting and privacy details are in the
-[reference](docs/reference.md#live-and-streaming).
-
-### Without installing anything
-
-The [Player](https://shinshin86.github.io/mesh-avatar-studio/play/) runs face tracking,
-microphone lip sync, expressions and lighting entirely in the browser. Open the sample or
-your own `.mavatar` file; nothing is uploaded. It has no stream URL: choose **Open avatar
-window** (Chrome or Edge) and add that window to OBS with **Window Capture** on a green
-background and a Chroma Key filter. Transparency, the OBS Browser Source and switching
-expressions from other apps need Studio's Live page.
-
-## Releases
-
-For changes to `mesh-avatar`, run `npm run changeset` and include the generated file in your
-PR. On `main`, GitHub Actions opens or updates a `chore: version packages` PR with the next
-version and changelog; merging it publishes `mesh-avatar` to npm with provenance. The Studio
-root package stays private. Publishing uses npm trusted publishing: on npmjs.com, add a trusted publisher for
-`mesh-avatar` that names this repository and the `release.yml` workflow; no npm token is stored
-in the repository. A publish that npm cannot match to a trusted publisher waits in the
-Staged Packages tab until a maintainer approves it with 2FA. In repository
-Settings → Actions → General, enable **Allow GitHub Actions to create and approve pull requests**
-so the workflow can open version PRs. Run `npm run e2e`
-locally before opening a PR; CI runs the other checks and does not install Playwright browsers.
-
-## More
-
-- [Agent guide](docs/agent-guide.md): the step-by-step procedure agents follow
-- [Reference](docs/reference.md): projects, building layers by hand, all editor controls, tests
-- [Rig fields](docs/rig-fields.md): what every value in `rig.json` means
-- [Avatar format](docs/format.md): folder and `.mavatar` layouts, metadata and validation
-
-## License
-
-The code is released under the [MIT License](LICENSE).
-
-The sample character Miko (`samples/miko-qipao/`) is not covered by the MIT License. Miko is the
-character of AITuber OnAir, © Yuki Shindo (AITuber OnAir), and her images are provided under the
-[Miko Character Usage Guidelines](https://miko.aituberonair.com/#terms); see
-[samples/miko-qipao/MIKO_ASSET_TERMS.md](samples/miko-qipao/MIKO_ASSET_TERMS.md). They may be used
-and modified as part of your own works, but not redistributed on their own or as an asset
-collection. This project is not an official AITuber OnAir product.
-
-Face tracking uses [MediaPipe](https://github.com/google-ai-edge/mediapipe) (`@mediapipe/tasks-vision`
-and the Face Landmarker model in `vendor/mediapipe/`), © The MediaPipe Authors, licensed under the
-Apache License 2.0; see [vendor/mediapipe/LICENSE](vendor/mediapipe/LICENSE).
+얼굴 추적의 MediaPipe와 Face Landmarker는 © The MediaPipe Authors, Apache License 2.0입니다. [MediaPipe 라이선스](vendor/mediapipe/LICENSE)를 확인하세요.
