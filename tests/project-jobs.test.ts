@@ -58,7 +58,7 @@ test('only one job or save runs per project and redirected paths cannot reach th
   expect((await call('/__studio/projects/nova/rig', fixture)).status).toBe(409);
   expect((await call('/__studio/projects/nova/variant-requests')).status).toBe(409);
   release(); await first;
-  await mkdir(join(root, 'outside')); await symlink(join(root, 'outside'), join(project, 'variants'));
+  await mkdir(join(root, 'outside')); await symlink(join(root, 'outside'), join(project, 'variants'), 'junction');
   const rejected = await call('/__studio/projects/nova/rebuild'); expect(rejected.status).toBe(422); expect(JSON.parse(rejected.body).code).toBe('unsafeFiles');
   expect(runner).toHaveBeenCalledOnce();
   for (const name of ['%2Fother', '..', 'nova%2F..%2Fother']) expect((await call(`/__studio/projects/${name}/rebuild`)).status).toBe(400);

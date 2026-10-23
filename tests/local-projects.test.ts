@@ -8,12 +8,14 @@ import { createServer, resolveConfig, type ViteDevServer } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import fixture from '../samples/miko-qipao/rig.json';
 import { localProjectMiddleware, localProjectsPlugin } from '../src/server/local-projects';
+import { redirectFile } from './redirect-fixture';
 
-const failure = vi.hoisted(() => ({ operation: '', path: '', code: '' }));
+const failure = vi.hoisted(() => ({ operation: '', path: '', code: '', redirects: new Map<string, string>() }));
 vi.mock('node:fs/promises', async importOriginal => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
   const methods = ['realpath', 'stat', 'readdir', 'readFile'] as const;
   return { ...actual, ...Object.fromEntries(methods.map(method => [method, async (...args: unknown[]) => {
+    if (method === 'realpath' && failure.redirects.has(String(args[0]))) return failure.redirects.get(String(args[0]));
     if (failure.operation === method && String(args[0]) === failure.path) {
       throw Object.assign(new Error(`Private filesystem details: ${failure.path}`), { code: failure.code, path: failure.path });
     }
@@ -33,7 +35,7 @@ beforeEach(async () => {
   }
   await writeFile(resolve(root, 'projects/nova/built/sprites/sprites.json'), '{}');
 });
-afterEach(async () => { failure.operation = ''; vi.useRealTimers(); await rm(root, { recursive: true, force: true }); });
+afterEach(async () => { failure.operation = ''; failure.redirects.clear(); vi.useRealTimers(); await rm(root, { recursive: true, force: true }); });
 
 async function call(path: string, method = 'GET', body?: unknown, headers: Record<string, string> = {}, reveal = vi.fn(async (_path: string) => { void _path; })) {
   const request = Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))]) as IncomingMessage;
@@ -71,8 +73,8 @@ test('rejects raw and encoded traversal, absolute paths, malformed encoding and 
   }
   await mkdir(resolve(root, 'outside'), { recursive: true });
   await writeFile(resolve(root, 'outside/secret.png'), 'private');
-  await symlink(resolve(root, 'outside'), resolve(root, 'projects/redirect'));
-  await symlink(resolve(root, 'outside/secret.png'), resolve(root, 'projects/nova/built/escape.png'));
+  await symlink(resolve(root, 'outside'), resolve(root, 'projects/redirect'), 'junction');
+  await redirectFile(resolve(root, 'outside/secret.png'), resolve(root, 'projects/nova/built/escape.png'), failure.redirects);
   expect((await call('/__studio/projects/redirect/source.png')).status).toBe(400);
   expect((await call('/__studio/projects/nova/built/escape.png')).status).toBe(400);
   expect((await call('/__studio/projects/redirect/rig', 'POST', fixture)).status).toBe(400);
@@ -87,7 +89,7 @@ test('serves local archive files and manifests but refuses redirected archives',
   await writeFile(resolve(root, 'projects/nova/avatar.json'), '{"name":"Nova"}');
   expect((await call('/__studio/projects/nova/avatar.json')).status).toBe(200);
   await writeFile(resolve(root, 'outside.mavatar'), 'private');
-  await symlink(resolve(root, 'outside.mavatar'), resolve(root, 'projects/redirect.mavatar'));
+  await redirectFile(resolve(root, 'outside.mavatar'), resolve(root, 'projects/redirect.mavatar'), failure.redirects);
   expect((await call('/__studio/projects/redirect.mavatar')).status).toBe(400);
   expect((await call('/__studio/projects/avatar.mavatar', 'POST')).status).toBe(404);
 });
@@ -114,7 +116,7 @@ test('refuses redirected rig writes and cross-origin operations, and reveals the
   expect((await call('/__studio/projects/nova/rig', 'POST', fixture, { origin: 'https://example.invalid' })).status).toBe(403);
   expect((await call('/__studio/projects', 'GET', undefined, { host: 'example.invalid' })).status).toBe(403);
   await rm(resolve(root, 'projects/nova/rig.json'));
-  await symlink(resolve(root, 'samples/miko-qipao/rig.json'), resolve(root, 'projects/nova/rig.json'));
+  await redirectFile(resolve(root, 'samples/miko-qipao/rig.json'), resolve(root, 'projects/nova/rig.json'), failure.redirects);
   expect((await call('/__studio/projects/nova/rig', 'POST', fixture)).status).toBe(400);
 });
 
@@ -240,7 +242,7 @@ test('sample copies reserve unused names, carry edits and built assets, and reje
   }
   expect(await readFile(resolve(root, 'samples/miko-qipao/rig.json'))).toEqual(original);
   expect(await readFile(resolve(root, 'projects/miko-qipao-copy/keep.txt'), 'utf8')).toBe('keep');
-  await symlink(resolve(root, 'projects/nova'), resolve(root, 'samples/miko-qipao/redirect'));
+  await symlink(resolve(root, 'projects/nova'), resolve(root, 'samples/miko-qipao/redirect'), 'junction');
   expect((await call('/__studio/copy-sample', 'POST', edited)).status).toBe(400);
   expect((await call('/__studio/projects/miko-qipao-copy-3/rig.json')).status).toBe(404);
 });

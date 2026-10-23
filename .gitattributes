@@ -1,0 +1,2 @@
+# Vite imports CLI modules in tests; keep their hashbangs compatible across OSes.
+*.mjs text eol=lf

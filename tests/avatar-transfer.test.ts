@@ -1,5 +1,12 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { redirectFile } from './redirect-fixture';
+
+const redirects = vi.hoisted(() => new Map<string, string>());
+vi.mock('node:fs/promises', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, realpath: async (path: string) => redirects.get(String(path)) ?? actual.realpath(path) };
+});
 import { dirname, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -27,7 +34,7 @@ beforeEach(async () => {
     await mkdir(dirname(file), { recursive: true }); await writeFile(file, bytes);
   }
 });
-afterEach(async () => { await rm(root, { recursive: true, force: true }); });
+afterEach(async () => { redirects.clear(); await rm(root, { recursive: true, force: true }); });
 afterAll(() => { vi.useRealTimers(); });
 async function call(path: string, data?: unknown, headers: Record<string, string> = {}) {
   const raw = data instanceof Uint8Array;
@@ -124,9 +131,9 @@ test('transfer endpoints enforce request size, origin and physical project bound
   expect((await call('export', { project: 'sample-miko-qipao' }, { origin: 'https://example.com' })).status).toBe(403);
   expect((await call('export', { project: '../samples/miko-qipao' })).status).toBe(400);
   expect((await call('export', { project: 'sample-miko-qipao', includeSource: 'yes' })).status).toBe(400);
-  await mkdir(resolve(root, 'outside')); await symlink(resolve(root, 'outside'), resolve(root, 'projects'));
+  await mkdir(resolve(root, 'outside')); await symlink(resolve(root, 'outside'), resolve(root, 'projects'), 'junction');
   expect((await call('import', bytes)).status).toBe(400); expect(await readdir(resolve(root, 'outside'))).toEqual([]);
   const source = resolve(root, 'samples/miko-qipao/source.png'); await rm(source);
-  await writeFile(resolve(root, 'outside/source.png'), 'private'); await symlink(resolve(root, 'outside/source.png'), source);
+  await writeFile(resolve(root, 'outside/source.png'), 'private'); await redirectFile(resolve(root, 'outside/source.png'), source, redirects);
   const failure = await exported(); expect(failure.status).toBe(400); expect(failure.json).toMatchObject({ error: 'Path must stay inside the project.' });
 });
