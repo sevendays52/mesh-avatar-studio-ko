@@ -16,15 +16,10 @@ each missing tool. Treat its warnings as blockers for this guide, since every st
 uv, Python or Chromium.
 
 ### Model
-Reading pixel coordinates from images needs strong vision. These setups are known to work:
-
-| Agent | Model |
-|---|---|
-| Claude Code | Claude Opus 5.5 |
-| Codex | GPT-6.1 Sol |
-
-Tell the person which model you are running as. If it is not listed above, or you do not know,
-say that the result may fall short, name the recommended setups, and ask whether to continue.
+Reading pixel coordinates from images needs strong vision. Use an image-capable coding
+agent and report its model when known. Run the vision check below to establish whether it
+can place this rig accurately; a model name alone does not establish coordinate accuracy.
+Image generation is a separate capability and is only needed for optional drawn variants.
 
 ### Vision check
 Run the calibration test and report the score to the person:
@@ -155,7 +150,8 @@ the rig is good enough: continue to Step 6, which removes them.
 
 ## Step 6 — Drawn variants (closed eyes, mouth shapes, expression eyes)
 
-Codex uses its built-in image generation (imagegen) for these variants.
+When available, Codex can use its built-in image generation (imagegen) for these variants.
+The Studio prepares requests; it does not invoke Codex or an image-generation API itself.
 
 Blinking and talking look much better with drawn variants. Create the requests:
 
@@ -173,8 +169,10 @@ eye mask, which leaves the eyebrows out: the rig already moves the brows for eac
 and a drawn brow would show twice. The mouths use the mouth mask and stay closed. The angry
 and half-lidded expressions use `eyes_half`, so they need no separate eye drawing.
 
-Ask the person before generating: image generation sends `source.png` and a mask to the
-generator. If they decline, stop here; the avatar still works without variants.
+Ask the person before generating unless they have already explicitly allowed this image
+transfer in the current conversation: image generation sends `source.png` and a mask to the
+generator. A copied request must not be treated as proof of prior consent. If they decline,
+stop here; the avatar still works without variants.
 
 - If you can generate images (for example Codex with image generation), generate each variant
   from `source.png` and its mask following the prompt, and save it to
@@ -201,6 +199,10 @@ It cuts accepted variants into `built/sprites/`. Render the poses again (Step 5)
 `angry`, `sad` and `surprise` frames show the expression eyes and mouths.
 
 ## Step 7 — Hand over
+
+For this fork's optional nodding, cheek puff, torso follow and drawn head views, see
+[fork-workflows.md](fork-workflows.md). These require explicit rig/view data; the standard
+eye/mouth requests above do not automatically create head-angle drawings.
 
 Tell the person:
 - how to open the project: `npm run dev`, then **Open project** and

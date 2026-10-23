@@ -3,6 +3,22 @@ import { resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { dismissGuide, samplePresent, sampleSkipReason } from './sample';
 
+for (const [language, mouth, permission, unavailable] of [
+  ['en', 'Mouth', 'Before sending images, ask for permission', 'If image generation is unavailable'],
+  ['ko', '입', '이미지 전송 전에 동의를 받으세요', '이미지 생성을 사용할 수 없다면'],
+  ['ja', '口', '画像を送る前に許可を得てください', '画像生成が利用できない場合'],
+] as const) test(`Codex request in ${language} names tools, protects the sample and checks image permission`, async ({ page }) => {
+  test.skip(!samplePresent, sampleSkipReason);
+  await page.addInitScript(language => localStorage.setItem('mesh-avatar-language', language), language);
+  await page.goto('/'); await dismissGuide(page);
+  await expect(page.getByTestId('preview-status')).toHaveAttribute('data-state', 'ready');
+  await page.getByTestId('variants-panel').getByRole('checkbox', { name: mouth, exact: true }).check();
+  const prompt = await page.getByTestId('ask-agent-variants').getByRole('textbox').inputValue();
+  for (const word of ['samples/miko-qipao', 'projects/miko-qipao-variants', 'docs/agent-guide.md', 'variant-requests', 'imagegen', 'build-sprites', 'render-poses', permission, unavailable]) expect(prompt).toContain(word);
+  expect(prompt).not.toMatch(/\bPROJECT\b|\bTARGET\b/);
+  await page.reload(); await expect(page.locator('html')).toHaveAttribute('lang', language);
+});
+
 test('paths stay hidden while copies keep full paths, folder buttons work and recipient changes persist', async ({ page, context }) => {
   test.skip(!samplePresent, sampleSkipReason); await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/'); await dismissGuide(page);
@@ -41,7 +57,8 @@ test('paths stay hidden while copies keep full paths, folder buttons work and re
   expect(visiblePaths).toEqual([]);
   await card.getByRole('button', { name: 'Copy message', exact: true }).click();
   const codex = await page.evaluate(() => navigator.clipboard.readText());
-  for (const word of ['imagegen', 'source.png', 'variants/', 'build-sprites', 'render-poses', 'already consented', 'Do not use other external services']) expect(codex).toContain(word);
+  for (const word of ['imagegen', 'source.png', 'variants/', 'build-sprites', 'render-poses', 'ask for permission', 'If image generation is unavailable', 'Do not use other external services']) expect(codex).toContain(word);
+  expect(codex).not.toContain('already consented');
   await expect(card.getByText('Images will be sent to Codex image generation.', { exact: true })).toBeVisible();
   await card.getByRole('button', { name: 'Claude Code', exact: true }).click();
   await expect(card.getByRole('button', { name: 'Claude Code', exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -54,7 +71,7 @@ test('paths stay hidden while copies keep full paths, folder buttons work and re
   await expect(card.getByRole('textbox')).toContainText('そこで止まってください'); await expect(card.locator('.agent-instruction')).toContainText('Claude Code');
   await card.getByRole('button', { name: 'Codex', exact: true }).click();
   await expect(card.getByText('画像は Codex の画像生成に送られます', { exact: true })).toBeVisible();
-  await expect(card.getByRole('textbox')).toContainText('ユーザーは Codex の画像生成の利用に同意済み');
+  await expect(card.getByRole('textbox')).toContainText('画像を送る前に許可を得てください');
   await expect(card.locator('.agent-instruction')).toHaveText('このリポジトリのフォルダで Codex を開いて、次の文章を貼ってください。');
   await card.getByRole('button', { name: 'フォルダのパスをコピー', exact: true }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(resolve('.'));

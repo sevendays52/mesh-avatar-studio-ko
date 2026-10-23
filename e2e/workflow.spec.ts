@@ -79,7 +79,8 @@ test('requests provide masks, root handoff and prompts; drops accept valid drawi
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(resolve('.'));
   await agent.getByRole('button', { name: 'Copy message', exact: true }).click();
   const prompt = await page.evaluate(() => navigator.clipboard.readText()); expect(prompt).toContain(`projects/${name}`); expect(prompt).toContain('Step 6'); expect(prompt).toContain('mouth drawn variants');
-  expect(prompt).toContain('The user has already consented to Codex image generation'); expect(prompt).toContain('Do not use other external services');
+  expect(prompt).toContain('Before sending images, ask for permission'); expect(prompt).toContain('Do not use other external services');
+  expect(prompt).not.toContain('already consented');
   await expect(agent.getByRole('button', { name: '✓ Copied', exact: true })).toHaveCount(2);
   await expect(agent.getByRole('button', { name: 'Copy message', exact: true })).toBeVisible({ timeout: 5000 });
   await expect(agent.locator('ol')).toHaveCount(0); await expect(panel.locator('select')).toHaveCount(0);
