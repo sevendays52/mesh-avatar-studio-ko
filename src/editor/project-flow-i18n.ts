@@ -62,4 +62,8 @@ const zh: FlowText = {
   steps: ['在仓库文件夹中打开 Codex。', '复制下方请求并粘贴到 Codex。', '保持本页打开，制作完成后打开虚拟形象。'],
   request: '复制 Codex 请求', folder: '复制仓库路径', source: '原始插画', waiting: '等待绑定和图层', completed: '文件已准备就绪', open: '打开虚拟形象', checking: '检查中…',
 };
+en.prompt += ' Complete the default drawn-avatar workflow in docs/codex-authoring.md: use imagegen edits for closed/half/smiling eyes, speaking mouths and up/down/left/right head drawings; rig each view and its own eye/mouth sprites, then register with tools/head-views.py pack. Prepare locally and ask once for consent covering this drawing set before transmission. A copied request is not consent. Do not stop at masks when generation is available and authorized; if unavailable or declined, report drawn assets as pending rather than calling the mesh preview complete.';
+ko.prompt += ' docs/codex-authoring.md의 기본 원화 제작 흐름까지 완료하세요. imagegen 편집으로 감은 눈·반감은 눈·웃는 눈, 발화 입 모양, 상하좌우 고개 원화를 만들고, 각 원화의 전용 리그와 눈·입 그림을 제작한 뒤 tools/head-views.py pack으로 등록하세요. 먼저 로컬 요청을 준비하고, 이 그림 세트의 이미지 전송 동의를 한 번에 받으세요. 요청문 복사는 동의가 아닙니다. 생성 가능하고 허용됐다면 마스크 준비에서 멈추지 말고 실제 생성·적용·검토까지 진행하세요. 도구가 없거나 거절됐다면 원화가 미완성임을 알리고 메쉬 미리보기를 완성본으로 보고하지 마세요.';
+ja.prompt += ' docs/codex-authoring.md の標準制作を完了してください。imagegen 編集で閉眼・半眼・笑顔の目、発話の口、上下左右の頭部原画を制作し、各原画専用のリグと目・口画像を作って tools/head-views.py pack で登録します。送信前に画像セット全体の許可を一度得てください。依頼文のコピーは同意ではありません。生成可能かつ許可済みならマスク準備だけで止まらず、生成・適用・目視確認まで進めます。生成できない場合は原画が未完成と報告してください。';
+zh.prompt = en.prompt;
 export const projectFlowText = { en, ko, ja, zh };

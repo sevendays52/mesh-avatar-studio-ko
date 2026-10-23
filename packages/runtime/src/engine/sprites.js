@@ -45,7 +45,7 @@ export function createSpriteModule(engine, rig) {
   // Eyes switch between drawings like anime frames: the original open eye (never with shifted
   // lids: lowering the cut-out lash left seams at the corners), the drawn half-closed eye,
   // and the drawn closed / smiling eye.
-  const EYE_OPEN_MIN = 0.75, EYE_CLOSED_MAX = 0.3, EYE_FADE_SEC = 0.06;
+  const EYE_OPEN_MIN = 0.75, EYE_CLOSED_MAX = 0.3;
 
   // Open eyes drawn for an expression (eyes_sad / eyes_surprise) replace the open and half-open
   // eye while it lasts; a blink still switches to the closed drawing. The angry face keeps the
@@ -81,17 +81,17 @@ export function createSpriteModule(engine, rig) {
   /**
    * @param R        Renderer
    * @param sheet    parsed sprites.json ({ build, layers: { name: [x, y, w, h] } })
-   * @param imgs     { name: HTMLImageElement }
+   * @param {Record<string, HTMLImageElement>} imgs Image textures by sprite name.
    * @param buildGrid, alphaOf  helpers from the renderer / page
    */
   function createSprites(R, sheet, imgs, buildGrid, alphaOf) {
     const items = {};
-    // draw order matters for the cross-fades: half-closed and expression eyes under closed / smiling,
-    // expression closed mouths under open ones (the fade-in frame is drawn on top)
+    // Expression closed mouths sit below fading open mouths. Eye drawings replace
+    // each other at full opacity; blending different eyelid positions creates ghosts.
     const shut = n => n.startsWith('eyes_closed') || n.startsWith('eyes_smile');
     const moodMouth = n => MOUTH_MOODS.some(m => n === `mouth_${m}`);
     const order = n => (shut(n) ? 1 : n.startsWith('eyes_') ? 0 : moodMouth(n) ? 2 : 3);
-    const entries = Object.entries(sheet.layers).filter(([name]) => !name.startsWith('pitch_view_')).sort((x, y) => order(x[0]) - order(y[0]));
+    const entries = Object.entries(sheet.layers).filter(([name]) => !name.startsWith('pitch_view_') && !name.startsWith('head_view_')).sort((x, y) => order(x[0]) - order(y[0]));
     for (const [name, rect] of entries) {
       const mesh = buildGrid(rect, rig.mesh.spriteCell, alphaOf(imgs[name]), imgs[name].width);
       const W = [], inner = [];
@@ -106,7 +106,6 @@ export function createSpriteModule(engine, rig) {
     }
     const tmp = [0, 0];
     let lastShape = null;
-    const eyeState = [0, 1].map(() => ({ cur: 'open', prev: 'open', t: 1 }));
 
     function place(item, P, phys, squash, width = 1) {
       const r = item.mesh.rest, o = item.mesh.pos;
@@ -131,41 +130,25 @@ export function createSpriteModule(engine, rig) {
        * `mood` (angry / sad / surprise) picks drawn expression eyes (sad, surprise) and closed
        * mouths (angry, sad) when the avatar has them.
        */
-      update(P, phys, dt = 1 / 60, mood = null) {
+      update(P, phys, _dt = 1 / 60, mood = null) {
         for (const it of Object.values(items)) it.layer.visible = false;
         const covered = [false, false];
         const eyes = [
           [P.eyeROpen, P.eyeSmile],
           [P.eyeLOpen, P.eyeSmileL ?? P.eyeSmile],
         ];
-        // the frame is picked by openness; when it changes, the new drawing fades in over
-        // EYE_FADE_SEC (a time-based cross-fade, so no double image is ever held)
+        // A blink uses opaque animation frames, including the half-eye and reopening.
+        // Fading an eyelid over the open eye shows two lids/irises and lags behind
+        // short blinks. Never hide the original eye unless its replacement exists.
         eyes.forEach(([open, smile], i) => {
-          const st = eyeState[i];
           const drawn = EYE_MOODS_DRAWN.includes(mood) && items[`eyes_${mood}_${i}`] ? `eyes_${mood}` : null;
-          const want = eyeSprite(open, smile, drawn) ?? 'open';
-          if (want !== st.cur) { st.prev = st.cur; st.cur = want; st.t = 0; }
-          // A redraw without elapsed time (a paused preview moving a slider) shows the target
-          // frame at once; otherwise the fade would stay at its first frame.
-          st.t = dt > 0 ? Math.min(1, st.t + dt / EYE_FADE_SEC) : 1;
-          const k = sstep(0, 1, st.t);
-          const show = (name, alpha) => {
-            if (name === 'open' || alpha <= 0.001) return;
-            const it = items[`${name}_${i}`];
-            if (!it) return;
-            it.layer.visible = true;
-            it.layer.alpha = alpha;
-            place(it, P, phys, 1);
-          };
-          // the outgoing frame stays fully drawn underneath while the new one fades in on top;
-          // fading out to the open eye works the other way round
-          // whichever frame is drawn higher up (closed/smile above half or expression eyes, all above the open eye)
-          // does the fading, the lower one stays solid, so the eye is never see-through
-          const rank = n => (n === 'open' ? -1 : shut(n) ? 1 : 0);
-          if (st.t >= 1) show(st.cur, 1);
-          else if (rank(st.cur) > rank(st.prev)) { show(st.prev, 1); show(st.cur, k); }
-          else { show(st.cur, 1); show(st.prev, 1 - k); }
-          covered[i] = st.cur !== 'open' && k >= 0.999;
+          const want = eyeSprite(open, smile, drawn);
+          const item = want && items[`${want}_${i}`];
+          if (!item) return;
+          item.layer.visible = true;
+          item.layer.alpha = 1;
+          place(item, P, phys, 1);
+          covered[i] = true;
         });
         const shape = mouthShape(P.mouthOpen, P.mouthForm, lastShape);
         lastShape = shape;

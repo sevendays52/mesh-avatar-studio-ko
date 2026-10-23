@@ -51,7 +51,7 @@ export const workflowKo: typeof workflowEn = {
   askAgent: '에이전트에게 요청',
   copyPrompt: '요청 복사', copyDone: '복사했습니다', rootUnavailable: '이 앱과 docs/agent-guide.md가 있는 폴더를 여세요. 개발 서버를 시작하면 여기서 전체 경로를 복사할 수 있습니다.',
   newIllustration: '새 일러스트로 만들기',
-  agentNewPrompt: '제공한 일러스트로 docs/agent-guide.md의 1–5단계에 따라 PROJECT에 프로젝트를 만들어 주세요. 먼저 모델 확인과 좌표 인식 교정을 진행하고, 레이어를 만든 뒤 포즈를 육안 검토해 주세요. 모든 이미지 파일은 이 저장소 안에 보관하세요. 대상 폴더가 이미 있으면 사용하지 않은 새 이름을 선택하세요. 앱의 프로젝트 메뉴에서 열 수 있는 상태가 되면 알려 주세요.',
+  agentNewPrompt: '제공한 일러스트로 PROJECT에서 docs/agent-guide.md와 docs/codex-authoring.md를 끝까지 진행하세요. 좌표 교정·확대 격자·리그 검증 후 감은 눈·반감은 눈·웃는 눈, 발화 입 모양과 상하좌우 고개 원화를 제작하세요. imagegen으로 보낼 그림 세트를 설명하고 전송 동의를 한 번에 받은 뒤 실제 편집, 각 고개 원화의 전용 리그·눈·입 그림 제작, tools/head-views.py pack 등록, 모든 포즈 육안 검토까지 진행하세요. 생성 가능하고 허용됐다면 메쉬 미리보기에서 멈추지 마세요. 불가능하면 원화가 미완성임을 보고하세요. 이미지와 파생물은 같은 프로젝트 안에 보관하고 기존 원본은 유지하세요. Studio에서 열 수 있게 되면 알려 주세요.',
   agentRecipient: '요청을 받을 에이전트', agentDisclosure: '이미지를 Codex 이미지 생성 서비스로 전송합니다.',
   agentCodexPrompt: 'docs/agent-guide.md의 6단계에 따라 PROJECT의 TARGET 그림을 만들어 주세요. 사용 가능한 경우 Codex 내장 이미지 생성(imagegen)을 사용하세요. variant-requests로 마스크를 준비하고, source.png와 각 마스크를 바탕으로 요청한 그림을 생성하세요. 원본 크기의 PNG를 variants/에 저장하고 build-sprites로 가져온 뒤 render-poses로 포즈를 육안 검토하세요(5단계). 이 대화에서 사용자가 명시적으로 허용하지 않았다면 이미지 전송 전에 동의를 받으세요. 이미지 생성을 사용할 수 없다면 로컬 마스크와 프롬프트를 준비하고 다음 단계를 안내하세요. 다른 외부 서비스는 사용하지 마세요. 모든 파일은 이 저장소 안에 보관하세요.',
   agentClaudePrompt: 'docs/agent-guide.md의 6단계에 따라 PROJECT의 TARGET 그림 제작 요청을 준비해 주세요. variant-requests로 마스크와 프롬프트를 만드세요. Claude Code는 이미지를 생성할 수 없습니다. 어떤 source.png, 마스크, 프롬프트를 Codex나 다른 이미지 생성 도구에 전달해야 하는지, 결과를 variants/의 어떤 원본 크기 PNG 이름으로 저장해야 하는지 구체적으로 안내한 뒤 멈추세요. 아직 이미지를 생성·전송하거나 build-sprites를 실행하지 마세요. 모든 파일은 이 저장소 안에 보관하세요.',

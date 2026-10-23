@@ -26,16 +26,38 @@ const poses = [
 
 async function main() {
   const args = process.argv.slice(2);
+  const blinkOnly = args.includes('--blink-only');
+  const headAxisOnly = args.includes('--head-axis-only');
+  const positional = args.filter(arg => !['--blink-only', '--head-axis-only'].includes(arg));
+  const usage = 'Usage: npm run render-poses -- <project> [--blink-only | --head-axis-only]';
   if (args.includes('--help')) {
-    console.log('Usage: npm run render-poses -- <project>');
+    console.log(usage);
     return;
   }
-  if (args.length !== 1) throw new Error('Usage: npm run render-poses -- <project>');
-  const project = await realpath(resolve(args[0]));
+  if (positional.length !== 1 || (blinkOnly && headAxisOnly)) throw new Error(usage);
+  const project = await realpath(resolve(positional[0]));
   if (relative(root, project).startsWith('..')) throw new Error('project must stay inside the repository');
   const rig = JSON.parse(await readFile(resolve(project, 'rig.json'), 'utf8'));
   const errors = validateRig(rig);
   if (errors.length) throw new Error(errors.join('\n'));
+  if (rig.head.views?.length) {
+    for (const view of rig.head.views) {
+      const anchor = { angleX: view.angleX, angleY: view.angleY };
+      poses.push([`head-${view.id}`, anchor],
+        [`head-${view.id}-half`, { ...anchor, eyeLOpen: 0.5, eyeROpen: 0.5 }],
+        [`head-${view.id}-closed`, { ...anchor, eyeLOpen: 0, eyeROpen: 0 }],
+        [`head-${view.id}-speaking`, { ...anchor, mouthOpen: 1 }],
+        [`head-${view.id}-mouth-i`, { ...anchor, mouthOpen: 1, mouthForm: -1 }],
+        [`head-${view.id}-mouth-o`, { ...anchor, mouthOpen: 1, mouthForm: 1 }]);
+      for (const factor of [.45, .55]) poses.push([`head-${view.id}-boundary-${factor}`, { angleX: view.angleX * factor, angleY: view.angleY * factor }]);
+    }
+    for (const x of [-30, 30]) for (const y of [-30, 30]) poses.push([`head-diagonal-${x}-${y}`, { angleX: x, angleY: y }]);
+  }
+  if (headAxisOnly) {
+    poses.length = 0;
+    for (const x of [-30, 0, 30]) for (const y of [-20, 0, 20]) poses.push([`axis-x${x}-y${y}`, { angleX: x, angleY: y }]);
+    for (const y of [-30, 30]) poses.push([`axis-x0-y${y}`, { angleX: 0, angleY: y }]);
+  }
   const built = await realpath(resolve(project, 'built'));
   if (relative(project, built).startsWith('..')) throw new Error('built folder must stay inside the project');
   const assets = {};
@@ -78,7 +100,7 @@ async function main() {
     // Only the local code server may be contacted; private images use data URLs.
     await page.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
     await page.goto(`${origin}/__pose_review__`);
-    const result = await page.evaluate(async ({ rig, assets, poses }) => {
+    const result = await page.evaluate(async ({ rig, assets, poses, blinkOnly, headAxisOnly }) => {
       const { createMeshAvatar, PARAMS } = await import('/packages/runtime/src/index.ts');
       const canvas = document.getElementById('avatar');
       const width = Math.ceil(rig.image.width * 1.2), height = Math.ceil(rig.image.height * 1.1);
@@ -90,20 +112,37 @@ async function main() {
         av.setAutoIdle(false); av.setAutoMotion(false); av.setParameters(defaults);
         return av;
       }
-      for (const [name, values, expression] of poses) {
+      if (blinkOnly) {
+        const av = await avatar();
+        av.setSwayGain(0);
+        const views = [{ id: 'neutral', angleX: 0, angleY: 0 }, ...(rig.head.views ?? [])];
+        for (const view of views) {
+          const anchor = { ...defaults, angleX: view.angleX, angleY: view.angleY };
+          av.setParameters(anchor); av.advance(.25, 60);
+          for (const [i, open] of [1, .7, .35, .15, .05, .15, .35, .7, 1].entries()) {
+            av.setParameters({ ...anchor, eyeLOpen: open, eyeROpen: open });
+            av.advance(1 / 60, 60);
+            pictures.push([`blink-${view.id}-${i}-open-${open}`, canvas.toDataURL()]);
+          }
+        }
+        av.destroy();
+      }
+      for (const [name, values, expression] of blinkOnly ? [] : poses) {
         const av = await avatar();
         av.setParameters({ ...defaults, ...values });
         if (expression) av.setExpression(expression);
         av.advance(1, 60);
         pictures.push([name, canvas.toDataURL()]); av.destroy();
       }
-      const av = await avatar();
-      av.setParameters({ ...defaults, angleX: 30 }); av.advance(0.2, 60);
-      av.setParameters(defaults);
-      for (const [i, seconds] of [0.05, 0.08, 0.12, 0.15, 0.2, 0.3].entries()) {
-        av.advance(seconds, 60); pictures.push([`hair-sway-${i}`, canvas.toDataURL()]);
+      if (!blinkOnly && !headAxisOnly) {
+        const av = await avatar();
+        av.setParameters({ ...defaults, angleX: 30 }); av.advance(0.2, 60);
+        av.setParameters(defaults);
+        for (const [i, seconds] of [0.05, 0.08, 0.12, 0.15, 0.2, 0.3].entries()) {
+          av.advance(seconds, 60); pictures.push([`hair-sway-${i}`, canvas.toDataURL()]);
+        }
+        av.destroy();
       }
-      av.destroy();
       const scale = Math.min(width / (rig.image.width * 1.2), height / (rig.image.height * 1.1));
       const ox = (width - rig.image.width * scale) / 2, oy = height - rig.image.height * scale;
       const bounds = points => {
@@ -140,14 +179,15 @@ async function main() {
         ctx.fillStyle = '#171b23'; ctx.font = '16px sans-serif'; ctx.fillText(name, x + 8, y + 22);
       }
       return { images: [...pictures, ...crops, ['contact-sheet', sheet.toDataURL()]], width, height, cropBounds: { eyes, mouth }, padTop: 0.1, padSide: 0.1 };
-    }, { rig, assets, poses });
+    }, { rig, assets, poses, blinkOnly, headAxisOnly });
     if (browserErrors.length) throw new Error(browserErrors.join('\n'));
-    const review = resolve(project, 'review'); await mkdir(review, { recursive: true });
+    const review = resolve(project, blinkOnly ? 'review/blinks' : headAxisOnly ? 'review/head-axes' : 'review'); await mkdir(review, { recursive: true });
     if (relative(project, await realpath(review)).startsWith('..')) throw new Error('review folder must stay inside the project');
     for (const [name, url] of result.images) await writeFile(resolve(review, `${name}.png`), Buffer.from(url.split(',')[1], 'base64'));
     const { images, ...metadata } = result;
-    await writeFile(resolve(review, 'poses.json'), JSON.stringify({ ...metadata, project: basename(project), fixedFps: 60, poseSeconds: 1, poses: poses.map(([name, parameters, expression]) => ({ name, parameters, ...(expression && { expression }) })), hairFrames: 6, files: images.map(([name]) => `${name}.png`) }, null, 2) + '\n');
-    console.log(`Rendered ${poses.length + 6} poses, eye/mouth crops and contact-sheet.png in ${relative(root, review)}/`);
+    const frames = images.filter(([name]) => !name.endsWith('-eyes') && !name.endsWith('-mouth') && name !== 'contact-sheet');
+    await writeFile(resolve(review, 'poses.json'), JSON.stringify({ ...metadata, project: basename(project), fixedFps: 60, poseSeconds: blinkOnly ? 1 / 60 : 1, poses: blinkOnly ? frames.map(([name]) => ({ name })) : poses.map(([name, parameters, expression]) => ({ name, parameters, ...(expression && { expression }) })), hairFrames: blinkOnly || headAxisOnly ? 0 : 6, files: images.map(([name]) => `${name}.png`) }, null, 2) + '\n');
+    console.log(`Rendered ${frames.length} ${blinkOnly ? 'blink frames' : 'poses'}, eye/mouth crops and contact-sheet.png in ${relative(root, review)}/`);
   } finally {
     await browser?.close();
     await server.close();

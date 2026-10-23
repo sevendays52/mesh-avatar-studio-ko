@@ -3,6 +3,7 @@ import fixture from '../samples/miko-qipao/rig.json';
 import { parseRig, PARAMS } from 'mesh-avatar';
 import { createRig } from '../packages/runtime/src/engine/rig.js';
 import { createSpriteModule, eyeMood } from '../packages/runtime/src/engine/sprites.js';
+import { Motion } from '../packages/runtime/src/engine/motion.js';
 
 const rig = parseRig(fixture);
 const engine = createRig(rig);
@@ -18,10 +19,10 @@ function sprites(names: string[]) {
   const grid = (rect: number[]) => ({ rest: [rect[0], rect[1]], pos: [0, 0] });
   type Create = (...args: unknown[]) => { update(P: Record<string, number>, phys: unknown, dt: number, mood?: string | null): { eyes: boolean[] } };
   const update = (createSpriteModule(engine, rig).createSprites as unknown as Create)(renderer, sheet, images, grid, () => new Uint8Array(1));
-  return (open: number, mood: string | null = null, dt = 1, mouthOpen = 0) => {
+  return Object.assign((open: number, mood: string | null = null, dt = 1, mouthOpen = 0) => {
     const result = update.update({ ...defaults, eyeROpen: open, eyeLOpen: open, eyeSmile: 0, eyeSmileL: 0, mouthOpen }, physics, dt, mood);
     return { covered: result.eyes, shown: [...layers].filter(([, layer]) => layer.visible && layer.alpha > 0).map(([name]) => name).sort() };
-  };
+  }, { layers });
 }
 
 const eyes = (...kinds: string[]) => kinds.flatMap(kind => [`eyes_${kind}_0`, `eyes_${kind}_1`]);
@@ -48,14 +49,42 @@ test('drawn expression eyes replace open and half eyes, and blinks still close t
   expect(frame(1, null)).toEqual({ covered: [false, false], shown: [] });
 });
 
-test('the blink fade keeps one drawing solid underneath, so no eye turns see-through', () => {
+test('the entire blink switches opaque drawings without double eyelids or a delayed reopening', () => {
   const frame = sprites(eyes('closed', 'half', 'sad'));
-  frame(0.78, 'sad');
-  // Mid-fade both drawings are shown and the layered eye stays hidden underneath.
-  expect(frame(0.1, 'sad', 0.02)).toEqual({ covered: [false, false], shown: eyes('closed', 'sad').sort() });
-  frame(0.1, 'sad', 1);
-  expect(frame(0.78, 'sad', 0.02).shown).toEqual(eyes('closed', 'sad').sort());
-  expect(frame(0.78, 'sad', 1).shown).toEqual(eyes('sad'));
+  for (const [open, kind] of [[1, null], [.7, 'half'], [.35, 'half'], [.15, 'closed'], [.05, 'closed'], [.15, 'closed'], [.35, 'half'], [.7, 'half'], [1, null]] as const) {
+    const result = frame(open, null, 1 / 60);
+    expect(result).toEqual({ covered: [!!kind, !!kind], shown: kind ? eyes(kind) : [] });
+    for (const name of result.shown) expect(frame.layers.get(name)?.alpha).toBe(1);
+  }
+  expect(frame(.78, 'sad', 1 / 60)).toEqual({ covered: [true, true], shown: eyes('sad') });
+  expect(frame(.1, 'sad', 1 / 60)).toEqual({ covered: [true, true], shown: eyes('closed') });
+  expect(frame(.78, 'sad', 1 / 60)).toEqual({ covered: [true, true], shown: eyes('sad') });
+});
+
+test('a missing eye drawing never hides the original eye', () => {
+  const frame = sprites(eyes('closed'));
+  expect(frame(.5, null, 1 / 60)).toEqual({ covered: [false, false], shown: [] });
+  expect(frame(.1, null, 1 / 60)).toEqual({ covered: [true, true], shown: eyes('closed') });
+  expect(frame(1, null, 1 / 60)).toEqual({ covered: [false, false], shown: [] });
+});
+
+test.each([30, 60, 120])('a short automatic blink fully hides the iris at %i fps', fps => {
+  const frame = sprites(eyes('closed', 'half'));
+  const motion = new Motion(rig.view.gazeCenter ?? [rig.head.cx, rig.head.cy]);
+  motion.mode = 'mouse'; motion.autoIdle = false; motion.autoMotion = false;
+  motion.blink.start = .02;
+  let closedFrames = 0;
+  for (let i = 0; i < Math.ceil(fps * .3); i++) {
+    const parameters = motion.update(1 / fps);
+    const result = frame(parameters.eyeROpen, null, 1 / fps);
+    if (parameters.eyeROpen < .3) {
+      closedFrames++;
+      expect(result.covered).toEqual([true, true]);
+      expect(result.shown).toEqual(eyes('closed'));
+      for (const name of eyes('closed')) expect(frame.layers.get(name)?.alpha).toBe(1);
+    }
+  }
+  expect(closedFrames).toBeGreaterThan(0);
 });
 
 test('avatars without drawn expression eyes keep the previous drawings', () => {

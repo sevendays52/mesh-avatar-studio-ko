@@ -52,7 +52,7 @@ export const workflowZh: typeof workflowEn = {
   askAgent: '请编程助手制作',
   copyPrompt: '复制请求', copyDone: '已复制', rootUnavailable: '请在包含本应用和 docs/agent-guide.md 的文件夹中打开编程助手。启动本地开发服务后，可在此复制完整路径。',
   newIllustration: '从新插画创建角色',
-  agentNewPrompt: '请使用我提供的插画，按照 docs/agent-guide.md 的步骤 1–5，在 PROJECT 创建项目。先进行模型检查和坐标识别校准，再构建图层并目视检查各个姿态。所有图片文件都保存在本仓库内。如果目标文件夹已存在，请使用一个未占用的新名称。完成后告诉我，让我能从应用的项目菜单中打开它。',
+  agentNewPrompt: '使用提供的插画，在 PROJECT 完成 docs/agent-guide.md 和 docs/codex-authoring.md。先校准坐标、检查放大网格和绑定，再用 imagegen 编辑闭眼、半闭眼、笑眼、说话嘴型和上下左右头部原画。传输前说明整套图片并征得一次明确同意；获得同意且工具可用后，完成编辑、每个视角的独立绑定及眼口图片、tools/head-views.py pack 注册和全部姿态目视检查。不可用时明确报告原画尚未完成。所有图片保存在同一项目，保留现有原图。完成后告知可在 Studio 打开。',
   agentRecipient: '接收请求的编程助手', agentDisclosure: '图片将发送给 Codex 生图服务。',
   agentCodexPrompt: '请按照 docs/agent-guide.md 的步骤 6，为 PROJECT 制作 TARGET差分。如果可用，请使用 Codex 内置生图功能（imagegen）：用 variant-requests 准备蒙版，根据 source.png 和对应蒙版生成所需图片，将与原图尺寸相同的 PNG 保存到 variants/，用 build-sprites 导入，再用 render-poses 目视检查姿态（步骤 5）。如果用户尚未在本次对话中明确允许，请先征得同意再发送图片。无法生图时，请在本地准备蒙版和提示词，并说明后续步骤。不要使用其他外部服务。所有文件都保存在本仓库内。',
   agentClaudePrompt: '请按照 docs/agent-guide.md 的步骤 6，为 PROJECT 的 TARGET差分准备制作请求。运行 variant-requests 生成蒙版和提示词。Claude Code 不能生成图片：请明确告诉我，需要将哪些 source.png、蒙版和提示词交给 Codex 或其他生图工具，以及应以哪些完整尺寸的 PNG 文件名保存到 variants/，然后停止。暂时不要生成或发送图片，也不要运行 build-sprites。所有文件都保存在本仓库内。',

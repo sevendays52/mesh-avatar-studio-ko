@@ -133,6 +133,10 @@ individually; readers must not require a complete set.
 | `mouth_sad` | Closed mouth for the sad expression (corners drooping). |
 
 The eye suffix is the index in `rig.eyes`, not a separate left/right convention.
+Eye drawings replace each other at full opacity as animation frames. They are not
+crossfaded: overlapping different lid positions exposes double lids/irises during
+short blinks. Reopening immediately returns to the original open eye. A missing
+eye drawing never hides the original eye.
 The expression eyes replace the open and half-open eye while the live expression
 (`setExpression`: `sad`, `surprise`) or the emotion tag (`setEmotion`: `sad`, `surprised`)
 is active; a blink still switches to `eyes_closed`. They cover the same area as the other
@@ -224,6 +228,31 @@ use `validateAvatarFiles` or `openAvatar` to validate the avatar contents.
 The stream view accepts `?avatar=<folder-or-.mavatar-URL>`. An explicit `project`
 query parameter takes precedence when both are present.
 
+
+## Drawn head views (yaw and pitch)
+
+Default Codex authoring uses optional `rig.head.views`, a list of 1–8 unique
+`{ "id": "left", "angleX": -30, "angleY": 0 }` entries. Both angles are in
+−30…30 degrees; neutral (0,0) is implicit and its ID is reserved. Do not combine
+this field with legacy `head.pitch.views`.
+
+`sprites.json.headViews[id]` contains the same complete `rig`, `layers` aliases and
+optional `sprites` aliases described below, using the `head_view_` image prefix.
+Nested head or pitch view lists are forbidden. The complete drawn rig and all referenced
+images must match the neutral dimensions. `tools/head-views.py` prepares protected-body
+edit requests, accepts images and packages finished rigs and sprites; see
+[codex-authoring.md](codex-authoring.md). Ordinary sprite rebuilds preserve this data.
+
+The runtime selects the nearest 2D angle pair within 45° of the requested direction,
+with 1° distance hysteresis and an 80ms temporal transition. Neutral is the fallback
+in unpainted sectors: missing side art must not select a nod because of camera pitch
+drift. The anchor angle is subtracted before rendering that view, so its
+painted perspective is not deformed twice. Residual yaw/pitch is capped at ±15° to avoid
+stretching a disappearing drawing during large jumps. Roll, gaze, expressions, body motion and
+physics remain animated, using that view's own rig. Small residual angle travel still
+uses the mesh; intermediate views can improve a visible switch. This path does not
+use legacy `pitchMorphs`. Old runtimes ignore these optional fields and additional
+sprite names and continue rendering the neutral avatar as before.
 
 ## Drawn pitch views
 

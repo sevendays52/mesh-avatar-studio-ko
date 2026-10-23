@@ -4,6 +4,11 @@
 
 ## 한국어
 
+Codex의 기본 자동 제작은 [codex-authoring.md](codex-authoring.md)를 따릅니다.
+눈·입 편집과 상하좌우 고개 원화, 각 원화의 전용 리그·표정 그림을 제작하고
+`head-views.py pack`으로 같은 프로젝트에 자동 등록합니다. 아래 별도 제작 설명은
+기존 `head.pitch.views`의 고급 수동 제작 절차입니다. 새 기본 제작에는 `head.views`를 사용합니다.
+
 기본 제작은 [agent-guide.md](agent-guide.md)를 순서대로 따르세요. 좌표 교정,
 확대 격자, 오버레이, 리그 검증과 포즈 검토는 추가 기능을 사용할 때도 필요합니다.
 이미지와 모든 파생물은 `projects/<이름>/` 안에 보관합니다.
@@ -30,7 +35,7 @@
 
 1. 정면 아바타를 완성하고 검증합니다. 숙임 각도와 원화 범위를 정하고, 외부 이미지
    생성이 필요하면 먼저 허용을 받습니다. 원화는 원본 크기·투명도·목 아래 몸을 맞춥니다.
-2. 각 원화를 `projects/` 안의 별도 작업 프로젝트로 준비합니다. 각 원화의 격자와
+2. 각 원화를 같은 `projects/<이름>/head-views-legacy/<id>/` 안의 작업 폴더로 준비합니다. 각 원화의 격자와
    오버레이를 확인하고 전용 리그·레이어·선택적 눈·입 그림을 빌드합니다.
 3. [아바타 형식](format.md#drawn-pitch-views)에 따라 정면 리그의 `head.pitch.views`에
    고유 ID와 각도(−30…30°, 0 제외, 최대 4개)를 등록합니다. `sprites.json.pitchViews`에
@@ -47,6 +52,10 @@
 
 ## English
 
+For default automatic Codex authoring, follow [codex-authoring.md](codex-authoring.md).
+It includes eye/mouth edits and yaw/pitch drawings with per-view rigs and sprites,
+packaged into the same project. The manual pitch-only procedure below is the legacy path.
+
 Follow [agent-guide.md](agent-guide.md) in order, including calibration, zoomed grids,
 overlays, validation and visual pose review. Keep images and derivatives under `projects/`.
 
@@ -61,7 +70,7 @@ Drawn head views require separate authoring; ordinary eye/mouth requests and
 
 1. Finish the neutral avatar. Prepare same-size angle drawings, preserving alpha and the
    body below the neck. Obtain permission before external generation.
-2. In separate working projects under `projects/`, calibrate each drawing's rig using
+2. In workspaces under the SAME `projects/<name>/head-views-legacy/<id>/`, calibrate each drawing's rig using
    grids/overlays, build its layers and prepare any eye/mouth sprites.
 3. Follow [the view format](format.md#drawn-pitch-views): add up to four unique nonzero
    −30…30° entries to `head.pitch.views`; supply complete per-view rigs and layer aliases
@@ -79,6 +88,10 @@ layers for a changed angle drawing.
 
 ## 日本語
 
+Codex の標準自動制作は [codex-authoring.md](codex-authoring.md) を参照してください。
+目・口・上下左右の原画を編集し、各原画のリグと表情画像を同じプロジェクトに登録します。
+以下の手動 pitch 専用手順は従来の形式です。
+
 [agent-guide.md](agent-guide.md) を順番に進め、座標校正、拡大格子、オーバーレイ、
 検証、ポーズ画像の目視確認を行います。画像と派生物は `projects/` 内に保存します。
 
@@ -92,7 +105,7 @@ Codex には基本リグ・レイヤー、目・口・表情のマスクと依�
 
 1. 正面アバターを完成させ、同じサイズ・透過・首から下の体を保った角度別原画を準備します。
    外部生成の前に許可を得てください。
-2. `projects/` 内の別の作業プロジェクトで、各原画の格子・オーバーレイ・リグを確認し、
+2. 同じ `projects/<名前>/head-views-legacy/<id>/` 内で、各原画の格子・オーバーレイ・リグを確認し、
    レイヤーと必要な目・口の画像を作ります。
 3. [形式の説明](format.md#drawn-pitch-views) に従い、`head.pitch.views` に固有 ID と
    0 を除く −30…30° の角度を最大4件登録します。`sprites.json.pitchViews` に各原画の

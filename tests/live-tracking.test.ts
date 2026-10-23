@@ -4,6 +4,7 @@ import fixture from '../samples/miko-qipao/rig.json';
 import { parseRig } from 'mesh-avatar';
 import { createRig } from '../packages/runtime/src/engine/rig.js';
 import { createSpriteModule } from '../packages/runtime/src/engine/sprites.js';
+import { nearestHeadView } from '../packages/runtime/src/engine/pitch-views.js';
 const options = { mirror: false, sensitivity: 1, smoothing: 0 };
 const multiply = (a: number[], b: number[]) => Array.from({ length: 9 }, (_, i) => {
   const row = i % 3, col = Math.floor(i / 3);
@@ -167,4 +168,18 @@ test('small pitch drift while turning does not select a bowed drawing, but true 
   for (let pitch = 0; pitch <= 15; pitch += .05) {
     const value = intentionalPitch(pitch, 30); expect(value).toBeGreaterThanOrEqual(previous); previous = value;
   }
+});
+
+test('mirrored camera yaw with amplified pitch drift cannot select a missing side as an upward head', () => {
+  const nodes = [{ angleX: 0, angleY: 0 }, { angleX: 30, angleY: 0 },
+    { angleX: 0, angleY: 30 }, { angleX: 0, angleY: -30 }];
+  for (const mirror of [false, true]) {
+    const face = readFace(rotationInput(mirror ? 30 : -30, -9, 0))!;
+    const pose = mapFace(face, null, { ...options, mirror, pitchSensitivity: 2 });
+    expect(pose.angleX).toBeCloseTo(-30);
+    expect(pose.angleY).toBeCloseTo(18);
+    expect(nearestHeadView(nodes, pose.angleX, pose.angleY)).toBe(0);
+  }
+  const nod = mapFace(readFace(rotationInput(0, -15, 0))!, null, { ...options, pitchSensitivity: 2 });
+  expect(nearestHeadView(nodes, nod.angleX, nod.angleY)).toBe(2);
 });

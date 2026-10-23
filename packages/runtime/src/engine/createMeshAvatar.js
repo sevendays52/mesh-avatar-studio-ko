@@ -83,7 +83,7 @@ export async function createMeshAvatarImpl(canvas, options) {
     }
     return `${base}${name}${build === undefined ? '' : `?b=${build}`}`;
   };
-  if (rig.head.pitch?.views?.length) {
+  if (rig.head.pitch?.views?.length || rig.head.views?.length) {
     const sheet = await loadJson(asset('sprites/sprites.json'));
     return createPitchViewAvatar(canvas, options, sheet, asset, createMeshAvatarImpl);
   }
@@ -129,7 +129,7 @@ export async function createMeshAvatarImpl(canvas, options) {
     {
       const sheet = options._sprites === undefined ? await loadJson(asset('sprites/sprites.json')) : options._sprites;
       if (sheet) {
-        const simgs = Object.fromEntries(await Promise.all(Object.keys(sheet.layers).map(async n =>
+        const simgs = Object.fromEntries(await Promise.all(Object.keys(sheet.layers).filter(n => !n.startsWith('head_view_')).map(async n =>
           [n, await loadImage(asset(`sprites/${n}.png`, sheet.build))])));
         sprites = createSprites(R, sheet, simgs, buildGrid, alphaOf);
       }

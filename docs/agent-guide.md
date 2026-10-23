@@ -19,7 +19,9 @@ uv, Python or Chromium.
 Reading pixel coordinates from images needs strong vision. Use an image-capable coding
 agent and report its model when known. Run the vision check below to establish whether it
 can place this rig accurately; a model name alone does not establish coordinate accuracy.
-Image generation is a separate capability and is only needed for optional drawn variants.
+Image generation is a separate capability. Default Codex delivery includes edited eye,
+mouth and head drawings; see [codex-authoring.md](codex-authoring.md). A mesh-only avatar
+is a fallback or an explicit user choice, not completion of the default drawn workflow.
 
 ### Vision check
 Run the calibration test and report the score to the person:
@@ -38,7 +40,7 @@ off, and most of the work below would need manual correction.
   shoulders visible. Warn the person if the face is in strong three-quarter view, if hands
   or objects cover the face, or if the hair heavily overlaps the face: these limit quality.
 - The image stays on this machine inside `projects/`, which is not committed. Never commit,
-  upload or copy it elsewhere. The only exception is Step 6, and only after the person agrees:
+  upload or copy it elsewhere. The only exception is image generation in Steps 6–7, and only after the person agrees:
   generating drawn variants sends the image and a mask to an image generator.
 
 ## Step 1 — Create the project
@@ -135,15 +137,25 @@ clothing; each eye ball layer contains the eye white and iris only.
 
 ```sh
 npm run render-poses -- projects/<name>
+node --experimental-strip-types tools/render-poses.mjs projects/<name> --blink-only
+node --experimental-strip-types tools/render-poses.mjs projects/<name> --head-axis-only
 ```
 
 This renders the avatar in fixed poses (rest, half and closed eyes, mouth open, turn left and
 right, look up and down, tilt, body tilt, the angry, sad and surprised expressions, and a hair
 sway sequence) into `projects/<name>/review/`, with a contact sheet and zoomed eye and mouth
 crops.
+The second command writes a short 60 fps blink sequence for neutral and each
+authored head view into `review/blinks/`. Inspect the closing frames too: a held
+closed-eye endpoint can pass while the actual blink never fully hides the iris.
+The third command checks horizontal turns with mixed pitch, plus true nods, in
+`review/head-axes/`. A missing left/right drawing must not select an unrelated
+up/down drawing when camera tracking adds some pitch to a horizontal turn.
 
 Look at every frame. Pass when:
 - closed eyes are fully closed, with one clean lash line and no leftover iris or white;
+- half-eye and reopening frames show one eyelid/iris, with no transparent double
+  contours; the final open frame returns to the original eye without a delayed lid;
 - turning ±30° and tilting do not tear the mesh, cut the chin or ears, or bend accessories;
 - the mouth opens without stretching the chin;
 - hair sways while face and clothing stay still.
@@ -163,7 +175,12 @@ the rig is good enough: continue to Step 6, which removes them.
 When available, Codex can use its built-in image generation (imagegen) for these variants.
 The Studio prepares requests; it does not invoke Codex or an image-generation API itself.
 
-Blinking and talking look much better with drawn variants. Create the requests:
+For a general Codex avatar request, automatically prepare the standard seven drawings
+(closed/half/smiling eyes and four mouths), obtain the required consent, then generate,
+import and review them. Do not ask the person to request blinking/speaking separately.
+Use the built-in imagegen edit capability with the actual source and mask as references;
+never replace them with a text-only description or a stretched procedural substitute.
+Create the requests:
 
 ```sh
 uv run tools/variant-requests.py projects/<name>
@@ -181,14 +198,17 @@ and half-lidded expressions use `eyes_half`, so they need no separate eye drawin
 
 Ask the person before generating unless they have already explicitly allowed this image
 transfer in the current conversation: image generation sends `source.png` and a mask to the
-generator. A copied request must not be treated as proof of prior consent. If they decline,
-stop here; the avatar still works without variants.
+generator. Include the Step 7 head drawings and their per-view eye/mouth edits in the same
+consent question; prepare those head requests locally before asking. A copied request must
+not be treated as proof of prior consent. If they decline, generate nothing, finish local
+request preparation and report the drawn assets as pending; the mesh preview still works.
 
 - If you can generate images (for example Codex with image generation), generate each variant
   from `source.png` and its mask following the prompt, and save it to
   `projects/<name>/variants/<variant>.png`.
-- Otherwise stop here and tell the person exactly which files to give to an image generator
-  and where to put the results. Continue when they say the files are in place.
+- Otherwise finish local head requests too, and tell the person exactly which files need
+  editing and where to put the results. Do not claim the drawn workflow is complete.
+  Continue when the required tool/consent or prepared images become available.
 
 In each mask, transparent pixels may change and opaque pixels must stay identical. Many
 generators recompress the whole image, fill in the transparent background or shift it by a
@@ -208,9 +228,19 @@ uv run tools/build-sprites.py projects/<name>
 It cuts accepted variants into `built/sprites/`. Render the poses again (Step 5); the
 `angry`, `sad` and `surprise` frames show the expression eyes and mouths.
 
-## Step 7 — Hand over
+## Step 7 — Drawn head directions (default Codex workflow)
 
-For this fork's optional nodding, cheek puff, torso follow and drawn head views, see
+Continue with [codex-authoring.md](codex-authoring.md). Use `head-views.py prepare` to
+prepare up/down/left/right edits, generate them after consent, accept each into this
+same project, trace each drawing's rig using zoomed grids, build its own layers and
+eye/mouth sprites, then use `head-views.py pack` to register all four. Validate and
+render again. These are actual perspective drawings; a y-shift, scale, flip or rotation
+of the original is not a new head view. If generation is unavailable/declined, report
+the missing drawings explicitly and offer the already usable mesh preview.
+
+## Step 8 — Hand over
+
+For this fork's optional nodding, cheek puff, torso follow and legacy pitch views, see
 [fork-workflows.md](fork-workflows.md). These require explicit rig/view data; the standard
 eye/mouth requests above do not automatically create head-angle drawings.
 

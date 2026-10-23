@@ -5,6 +5,27 @@ To create an avatar from an illustration, follow [docs/agent-guide.md](docs/agen
 in order, including coordinate calibration, zoomed grids, overlays and pose review.
 Field meanings are in [docs/rig-fields.md](docs/rig-fields.md).
 
+## Default Codex avatar delivery
+
+A general request to make an avatar includes drawn animation assets, not just a mesh
+stretched from the neutral picture. Follow [docs/codex-authoring.md](docs/codex-authoring.md):
+prepare and, after consent, use Codex imagegen to EDIT closed/half/smiling eyes,
+speaking mouths, and up/down/image-left/image-right head drawings. Calibrate each
+head drawing's own rig and eye/mouth sprites, package it with `tools/head-views.py`,
+and visually review endpoints, intermediate angles and combined expressions.
+Do not stop at masks/prompts when generation is available and authorized. Do not
+silently substitute procedural eyes/mouths or stretch the frontal face and call the
+drawn avatar complete. Respect an explicit request for mesh-only/local-only work.
+
+Before any external image transfer, explain the source/masks, Codex image generation,
+and the planned drawing set, and obtain consent once for that set unless it has already
+been granted in this conversation. Copying Studio's request is not consent. If consent
+or the generation capability is missing, finish all local preparation and report the
+drawn assets as pending. Do not switch to another service or a paid API without consent.
+Keep each view under the SAME `projects/<name>/head-views/<id>/` project tree; do not
+create sibling avatar projects or overwrite the neutral source. Existing rigs and
+already accepted drawings must be resumed rather than reinitialized.
+
 - Keep user images and all derived files in `projects/`. Never commit, upload or copy them
   outside this repository. Ask the user before sending an image to any external service.
 - `projects/` and scratch `work/` are ignored. Do not stage them or bypass their ignore rules.
@@ -23,6 +44,7 @@ npm run build:react
 npm run e2e
 uv run --with numpy --with pillow --with opencv-python-headless tools/test_build_layers.py
 uv run tools/test_agent_tools.py
+uv run tools/test_head_views.py
 ```
 
 The numerical deformation regression must remain 0 px (physics has floating-point tolerance).

@@ -108,6 +108,23 @@ class AgentToolsTest(unittest.TestCase):
         self.assertIn("mouth_a", after["layers"])
         self.assertEqual((output / f"{name}.png").read_bytes(), before)
 
+    def test_sprite_rebuild_preserves_yaw_pitch_drawings(self):
+        variants = self.project / "variants"
+        variants.mkdir()
+        Image.open(self.project / "source.png").save(variants / "mouth_a.png")
+        output = self.project / "built/sprites"
+        output.mkdir(parents=True)
+        name = "head_view_left_base"
+        Image.new("RGBA", (100, 100), "red").save(output / f"{name}.png")
+        before = (output / f"{name}.png").read_bytes()
+        view = {"left": {"rig": {"version": 1}, "layers": {"base": name}}}
+        (output / "sprites.json").write_text(json.dumps({"build": "before", "layers": {name: [0, 0, 100, 100]}, "headViews": view}))
+        sprites.build(self.project)
+        after = json.loads((output / "sprites.json").read_text())
+        self.assertEqual(after["headViews"], view)
+        self.assertEqual(after["layers"][name], [0, 0, 100, 100])
+        self.assertEqual((output / f"{name}.png").read_bytes(), before)
+
     def test_new_project_warns_and_refuses_replacement_or_unsafe_names(self):
         name = self.project.name + "-new"
         created = ROOT / "projects" / name

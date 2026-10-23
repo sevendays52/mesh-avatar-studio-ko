@@ -4,16 +4,25 @@ import { pitchMorphs } from './head-morph.js';
 
 export function pitchViewPackages(rig, sheet, asset) {
   pitchMorphs(rig, sheet);
-  return rig.head.pitch.views.map(({ id, angleY }) => {
-    const view = sheet.pitchViews?.[id];
+  return viewPackages(rig, sheet, asset, rig.head.pitch.views, 'pitchViews', 'pitch_view_');
+}
+
+export function headViewPackages(rig, sheet, asset) {
+  return viewPackages(rig, sheet, asset, rig.head.views, 'headViews', 'head_view_');
+}
+
+function viewPackages(rig, sheet, asset, definitions, key, prefix) {
+  return definitions.map(definition => {
+    const { id } = definition;
+    const view = sheet[key]?.[id];
     if (!view || !view.layers || typeof view.layers !== 'object') throw new Error(`Pitch view ${id}: missing layer metadata`);
     const posedRig = parseRig(view.rig);
-    if (posedRig.head.pitch?.views?.length) throw new Error(`Pitch view ${id}: nested views are not supported`);
+    if (posedRig.head.pitch?.views?.length || posedRig.head.views?.length) throw new Error(`Pitch view ${id}: nested views are not supported`);
     if (posedRig.image.width !== rig.image.width || posedRig.image.height !== rig.image.height)
       throw new Error(`Pitch view ${id}: image size must match the neutral rig`);
     const aliases = {}, layers = {}, sprites = {};
     const map = (name, target, sprite = false) => {
-      if (!/^[A-Za-z0-9_-]+$/.test(name) || typeof target !== 'string' || !/^pitch_view_[A-Za-z0-9_-]+$/.test(target)
+      if (!/^[A-Za-z0-9_-]+$/.test(name) || typeof target !== 'string' || !target.startsWith(prefix) || !/^[A-Za-z0-9_-]+$/.test(target)
         || !Object.hasOwn(sheet.layers, target)) throw new Error(`Pitch view ${id}: invalid image alias ${name}`);
       aliases[`${sprite ? 'sprites/' : ''}${name}.png`] = asset(`sprites/${target}.png`, sheet.build);
       (sprite ? sprites : layers)[name] = sheet.layers[target];
@@ -23,9 +32,29 @@ export function pitchViewPackages(rig, sheet, asset) {
     const required = ['base', 'hairmask', ...[0, 1].flatMap(i => ['ball', 'lash', 'low', 'crease'].map(p => `eye${i}_${p}`)),
       ...(posedRig.hand ? ['hand'] : []), ...(posedRig.accessories ?? []).map(t => t.name)];
     for (const name of required) if (!Object.hasOwn(aliases, `${name}.png`)) throw new Error(`Pitch view ${id}: missing ${name}`);
-    return { id, angleY, rig: posedRig, assets: aliases, metadata: { build: sheet.build, layers, eyes: posedRig.eyes },
+    if (key === 'headViews') for (const name of ['base', 'hairmask']) {
+      if (JSON.stringify(layers[name]) !== JSON.stringify([0, 0, rig.image.width, rig.image.height]))
+        throw new Error(`Head view ${id}: ${name} must cover the full image`);
+    }
+    return { ...definition, rig: posedRig, assets: aliases, metadata: { build: sheet.build, layers, eyes: posedRig.eyes },
       spriteMetadata: Object.keys(sprites).length ? { build: sheet.build, layers: sprites } : null };
   });
+}
+
+// Compare distance only within the requested direction's 45-degree cone. A missing
+// side view must not become a nod just because camera yaw contains some pitch.
+// Neutral remains the fallback in unpainted sectors; hysteresis uses degrees.
+export function nearestHeadView(nodes, x, y, selected = 0) {
+  const distance = n => Math.hypot(x - n.angleX, y - n.angleY);
+  const length = Math.hypot(x, y);
+  const eligible = n => {
+    const anchorLength = Math.hypot(n.angleX, n.angleY);
+    return anchorLength === 0 || x * n.angleX + y * n.angleY + 1e-9 >= length * anchorLength * Math.SQRT1_2;
+  };
+  let nearest = 0;
+  nodes.forEach((node, i) => { if (eligible(node) && distance(node) < distance(nodes[nearest])) nearest = i; });
+  if (!eligible(nodes[selected])) return nearest;
+  return distance(nodes[nearest]) + 1 < distance(nodes[selected]) ? nearest : selected;
 }
 
 function compositor(canvas) {
@@ -77,9 +106,12 @@ function compositor(canvas) {
 }
 
 export async function createPitchViewAvatar(canvas, options, sheet, asset, createAvatar) {
-  const packages = pitchViewPackages(options.rig, sheet, asset);
-  const morphs = pitchMorphs(options.rig, sheet);
-  const neutralRig = structuredClone(options.rig); delete neutralRig.head.pitch.views;
+  const directional = !!options.rig.head.views?.length;
+  const packages = directional ? headViewPackages(options.rig, sheet, asset) : pitchViewPackages(options.rig, sheet, asset);
+  const morphs = directional ? [] : pitchMorphs(options.rig, sheet);
+  const neutralRig = structuredClone(options.rig);
+  delete neutralRig.head.views;
+  if (neutralRig.head.pitch) delete neutralRig.head.pitch.views;
   const container = canvas.ownerDocument.createElement('div');
   container.style.cssText = 'position:fixed;left:-100000px;top:0;visibility:hidden;pointer-events:none;';
   container.setAttribute('aria-hidden', 'true');
@@ -95,13 +127,14 @@ export async function createPitchViewAvatar(canvas, options, sheet, asset, creat
   const resize = () => { container.style.width = `${Math.max(1, canvas.clientWidth)}px`; container.style.height = `${Math.max(1, canvas.clientHeight)}px`; };
   resize();
   try {
-    for (const pack of [{ id: 'neutral', angleY: 0, rig: neutralRig, assets: options.assets }, ...packages]) {
+    for (const pack of [{ id: 'neutral', angleX: 0, angleY: 0, rig: neutralRig, assets: options.assets }, ...packages]) {
       const surface = canvas.ownerDocument.createElement('canvas');
       surface.style.cssText = 'width:100%;height:100%;display:block;'; container.appendChild(surface);
       const sources = morphs.filter(m => [m.from, m.to].includes(pack.id)).map(m => ({ key: `${m.from}:${m.to}`,
         grid: m.grid, field: pack.id === m.from ? m.forward : m.backward, sourceBand: pack.rig.head.weightBand,
         neutralBand: neutralRig.head.weightBand, toCanonical: headViewWarp(pack.rig, headLandmarks(neutralRig)) }));
       const avatar = await createAvatar(surface, { ...options, rig: pack.rig, assets: pack.assets, manual: true,
+        ...(directional && { padTop: options.padTop ?? options.rig.view.padTop, padSide: options.padSide ?? options.rig.view.padSide }),
         _headMorphSources: sources.length ? sources : undefined,
         _metadata: pack.metadata, _sprites: pack.spriteMetadata });
       nodes.push({ ...pack, surface, avatar, landmarks: headLandmarks(pack.rig) });
@@ -111,12 +144,14 @@ export async function createPitchViewAvatar(canvas, options, sheet, asset, creat
     let selected = 0, previous = 0, fade = 1;
     const step = dt => {
       resize(); root.advanceParameters(dt);
-      const p = root.getParameters(), active = pitchViewWeights(nodes.map(n => n.angleY), p.angleY ?? 0);
+      const p = root.getParameters();
+      const nextView = directional ? nearestHeadView(nodes, p.angleX ?? 0, p.angleY ?? 0, selected) : 0;
+      const active = directional ? [{ index: nextView, weight: 1 }] : pitchViewWeights(nodes.map(n => n.angleY), p.angleY ?? 0);
       const mood = root._spriteMood();
       const nearest = active.reduce((a, b) => b.weight > a.weight ? b : a).index;
       // Keep one crisp drawing at a held angle. A brief temporal dissolve hides
       // changes in painted hair/clip contours; angle-based dissolves leave ghosts.
-      if (nearest !== selected && Math.abs((p.angleY ?? 0) - nodes[nearest].angleY) + 1 < Math.abs((p.angleY ?? 0) - nodes[selected].angleY)) {
+      if (nearest !== selected && (directional || Math.abs((p.angleY ?? 0) - nodes[nearest].angleY) + 1 < Math.abs((p.angleY ?? 0) - nodes[selected].angleY))) {
         previous = fade < 0.5 ? previous : selected; selected = nearest; fade = 0;
       }
       fade = dt > 0 ? Math.min(1, fade + dt / 0.08) : 1;
@@ -133,10 +168,14 @@ export async function createPitchViewAvatar(canvas, options, sheet, asset, creat
           weight: 1 - part.weight, sourceBottom: node.rig.head.weightBand[1],
           sourceBand: node.rig.head.weightBand, neutralBand: neutralRig.head.weightBand,
           toCanonical: headViewWarp(node.rig, nodes[0].landmarks), fromCanonical: headViewWarp(neutralRig, target) }) : undefined;
-        node.avatar._setHeadWarp(drawn ? headViewWarp(node.rig, target, morph) : null);
+        node.avatar._setHeadWarp(!directional && drawn ? headViewWarp(node.rig, target, morph) : null);
         // One motion/expression clock drives every drawing. Each view keeps its own
         // rig, eye clipping, mouth sprites and physics, including while not visible.
-        node.avatar._renderParameters(p, dt, continuous ? active.some(v => v.index === index) : index === selected || (fade < 1 && index === previous), mood);
+        // The drawing already contains its anchor angle. Apply only the remaining
+        // travel, so at the anchor the painted face is not stretched a second time.
+        const residual = value => Math.max(-15, Math.min(15, value));
+        const pose = directional ? { ...p, angleX: residual((p.angleX ?? 0) - node.angleX), angleY: residual((p.angleY ?? 0) - node.angleY) } : p;
+        node.avatar._renderParameters(pose, dt, continuous ? active.some(v => v.index === index) : index === selected || (fade < 1 && index === previous), mood);
       });
       if (continuous) composite.draw(nodes[previous].surface, nodes[selected].surface, previous === selected ? 0 : fade);
       else composite.draw(nodes[fade < 1 ? previous : selected].surface, nodes[selected].surface, fade < 1 ? fade : 0);

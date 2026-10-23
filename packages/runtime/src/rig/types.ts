@@ -49,6 +49,8 @@ export interface Rig {
     maxRoll: number; weightBand: Band; turnBand: Band;
     /** Optional neck-centred pitch projection; angles in radians, depth in source pixels. */
     pitch?: { maxAngle: number; depth: number; facePreservation?: number; views?: { id: string; angleY: number }[] };
+    /** Independently drawn head poses. Neutral (0, 0) is implicit; degrees. */
+    views?: { id: string; angleX: number; angleY: number }[];
   };
   body: {
     pivotX: number; pivotY: number; maxRoll: number;

@@ -11,6 +11,13 @@ and validation constraints.
 
 For React and Next.js, use [mesh-avatar-react](https://github.com/shinshin86/mesh-avatar-studio/tree/main/packages/react).
 
+Optional `head.views: [{ id, angleX, angleY }]` selects independently rigged yaw/pitch
+drawings with their own blinking and speaking sprites. Angle pairs are unique within
+−30…30 degrees; neutral (0,0) is implicit. The selected drawing's anchor is subtracted
+before residual animation, preserving its painted perspective. This is additive data;
+avatars that omit it and existing `head.pitch.views` retain their rendering path.
+See [Codex authoring](../../docs/codex-authoring.md) and [format](../../docs/format.md#drawn-head-views-yaw-and-pitch).
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/shinshin86/mesh-avatar-studio/main/docs/images/face-tracking.gif" width="400" alt="A Mesh Avatar Studio avatar following a face through a webcam">
 </p>

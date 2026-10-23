@@ -10,7 +10,7 @@ radii and mesh cell sizes must be positive. Mesh cell sizes and fine-mesh rectan
 coordinates must be integers. Accessory boxes must be integer rectangles inside the image. A band is `[start, end]` with `start < end`.
 Ellipses are smooth influence regions, not hard cut-out boundaries.
 
-Only `buns`, `strands`, `accessories`, `hand`, `head.pitch`, `body.motion`, `cheekPuff` and `view.gazeCenter` are optional. Omit absent
+Only `buns`, `strands`, `accessories`, `hand`, `head.pitch`, `head.views`, `body.motion`, `cheekPuff` and `view.gazeCenter` are optional. Omit absent
 optional groups. Required regions must still be placed even if their animation will be small.
 The initial draft has empty eye polygons and is intentionally invalid until they are traced.
 See [agent-guide.md](agent-guide.md) for the process and [rig-mapping.md](rig-mapping.md) for
@@ -36,6 +36,7 @@ the engine mapping. Do not copy the example illustration's coordinates into a ne
 | `head.pitch.depth` | Face-centre depth in front of the neck, px, nonnegative; fades smoothly toward the head ellipse rim and to zero at the neck pivot. Start near 20% of `head.ry`. Supply both pitch fields together. The projection adds to existing `shiftY` travel and follows `weightBand`. |
 | `head.pitch.facePreservation` | Optional 0–1 preservation of facial proportions while looking down. At `1`, brow/eye-to-jaw regions move together, with pitch blended into the crown and neck; travel is limited by space between the jaw region and the end of `weightBand`. The effect eases in over the first 15° of downward `angleY`. Omit or use `0` for exact previous pitch behavior. |
 | `head.pitch.views` | Optional list of 1–4 drawn angle views. Each entry has a safe unique `id` and unique nonzero `angleY` in −30…30 degrees; neutral `0` is implicit. Matching `pitchViews[id]` metadata and images live in `built/sprites/sprites.json`. Each drawing has its own rig and animated eye/mouth layers. See [format.md](format.md#drawn-pitch-views). |
+| `head.views` | Optional list of 1–8 independently drawn yaw/pitch poses: `{id, angleX, angleY}` in degrees, each angle −30…30. IDs and angle pairs must be unique; `neutral` and (0,0) are reserved. Use `sprites.json.headViews` and `head_view_*` PNGs. Cannot coexist with `head.pitch.views`. At the anchor only residual yaw/pitch is applied. See [Codex authoring](codex-authoring.md). |
 | `body.pivotX` | Body roll pivot x, px; middle of the lower torso. |
 | `body.pivotY` | Body roll pivot y, px; near the bottom of the image. |
 | `body.maxRoll` | Body rotation at a ±10° body pose, radians; start near `0.035`. |

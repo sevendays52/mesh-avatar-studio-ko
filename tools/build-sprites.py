@@ -238,16 +238,19 @@ def build(project, output=None, tolerance=8):
             Image.fromarray(crop).save(stage / f"{name}.png")
         pitch_views = None
         pitch_morphs = None
+        head_views = None
         previous = output / "sprites.json"
         if previous.exists():
             old = json.loads(previous.read_text(encoding="utf-8"))
+            head_views = old.get("headViews")
             if isinstance(old.get("pitchViews"), dict):
                 pitch_views = old["pitchViews"]
                 pitch_morphs = old.get("pitchMorphs")
+            if pitch_views is not None or isinstance(head_views, dict):
                 for name, rect in old.get("layers", {}).items():
-                    if not name.startswith("pitch_view_"):
+                    if not name.startswith(("pitch_view_", "head_view_")):
                         continue
-                    if not re.fullmatch(r"pitch_view_[A-Za-z0-9_-]+", name):
+                    if not re.fullmatch(r"(?:pitch|head)_view_[A-Za-z0-9_-]+", name):
                         raise ValueError("invalid pitch view layer name")
                     asset = inside_repo(output / f"{name}.png")
                     if asset.parent != output.resolve():
@@ -262,6 +265,8 @@ def build(project, output=None, tolerance=8):
             manifest["pitchViews"] = pitch_views
         if pitch_morphs is not None:
             manifest["pitchMorphs"] = pitch_morphs
+        if isinstance(head_views, dict):
+            manifest["headViews"] = head_views
         (stage / "sprites.json").write_text(
             json.dumps(manifest, indent=2) + "\n",
             encoding="utf-8",

@@ -25,6 +25,7 @@ spring/motion tuning remain engine behavior constants.
 | head | HEAD, headWeight, turnWeight |
 | head.pitch (optional) | applyHead neck-centred vertical projection and smooth face depth, shared by base, eye/mouth sprites and physics anchors; omitted data retains exact legacy deformation |
 | head.pitch.views (optional) | independently rigged drawings; monotone crown/eyes/mouth/jaw/neck alignment, nearest-view selection with 1° hysteresis, and an 80ms premultiplied transition. Held angles use one drawing to avoid persistent contour ghosts. |
+| head.views (optional) | independently rigged yaw/pitch drawings; nearest 2D anchor with 1° hysteresis and 80ms transition; subtract the drawing's angle and cap residual yaw/pitch at ±15°. Each view supplies its own animated eyes/mouth. |
 | head.pitch.facePreservation (optional) | downward nod blends eye/brow-to-jaw regions into shared face translation, fading toward crown, head sides and neck; suppresses local vertical feature compression within that region |
 | body.motion (optional) | applyBody secondary turn/nod and shoulder travel, pinned by rollBand |
 | cheekPuff (optional) | compact cubic cheek weights, deformBase outward inflation before head/body transforms |

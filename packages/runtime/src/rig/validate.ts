@@ -60,13 +60,18 @@ const viewAngle: Check = (v, p, e) => {
 const viewId: Check = (v, p, e) => {
   if (typeof v !== 'string' || !/^[A-Za-z0-9_-]+$/.test(v)) e.push(`${p}: expected a layer identifier`);
 };
+const headViewAngle: Check = (v, p, e) => {
+  number(v, p, e);
+  if (typeof v === 'number' && Math.abs(v) > 30) e.push(`${p}: must be between -30 and 30 degrees`);
+};
 const schema = (draft: boolean) => object({
   version: (v, p, e) => { if (v !== 1) e.push(`${p}: only version 1 is supported`); },
   image: object({ width: integer, height: integer }),
   head: object({ ...ellipseFields, shiftX: number, shiftY: number, pivotX: number,
     pivotY: number, maxRoll: number, weightBand: band, turnBand: band,
     pitch: object({ maxAngle: pitchAngle, depth: nonnegative, facePreservation: unit,
-      views: array(object({ id: viewId, angleY: viewAngle }), 1, 4) }, ['facePreservation', 'views']) }, ['pitch']),
+      views: array(object({ id: viewId, angleY: viewAngle }), 1, 4) }, ['facePreservation', 'views']),
+    views: array(object({ id: viewId, angleX: headViewAngle, angleY: headViewAngle }), 1, 8) }, ['pitch', 'views']),
   body: object({ pivotX: number, pivotY: number, maxRoll: number, breathBand: band,
     rollBand: band, chest: ellipse, shoulders: array(ellipse),
     motion: object({ turn: nonnegative, nod: nonnegative, shoulder: nonnegative }) }, ['motion']),
@@ -105,6 +110,12 @@ export function validateRig(value: unknown, options: { draft?: boolean } = {}): 
   const views = rig.head.pitch?.views ?? [];
   if (new Set(views.map(v => v.id)).size !== views.length || new Set(views.map(v => v.angleY)).size !== views.length)
     errors.push('rig.head.pitch.views: identifiers and angles must be unique');
+  const headViews = rig.head.views ?? [];
+  if (headViews.some(v => v.id === 'neutral' || (v.angleX === 0 && v.angleY === 0)) ||
+    new Set(headViews.map(v => v.id)).size !== headViews.length ||
+    new Set(headViews.map(v => `${v.angleX}:${v.angleY}`)).size !== headViews.length)
+    errors.push('rig.head.views: use unique identifiers/poses; neutral (0,0) is implicit and reserved');
+  if (headViews.length && views.length) errors.push('rig.head.views: cannot combine with head.pitch.views');
   rig.eyes.forEach((eye, i) => {
     const curves = ['x0', 'x1', 'top', 'bot'] as const;
     if (options.draft && curves.every(key => eye[key] === undefined)) return;

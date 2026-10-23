@@ -16,7 +16,7 @@ The editor, WebGL engine, expressions, lip sync, camera tracking, lighting and `
 |---|---|
 | Korean | Editor, Live, lighting, import/export, agent requests and environment diagnostics. English, Japanese and the existing Chinese UI remain available. |
 | Head and torso | Optional rig data enables neck-centered nodding, face proportion preservation and torso follow. |
-| Drawn head views | Additional nod-angle drawings and rigs, with deformation and blending between views when correspondence grids are supplied. Requires additional artwork and configuration. |
+| Drawn head views | Codex authors yaw/pitch drawings with per-view rigs and eye/mouth sprites, then packages them automatically. Legacy pitch drawings and correspondence grids remain supported. |
 | Tracking | Rotation relative to calibration, nod direction/sensitivity/inversion, mouth opening and mouth shape sensitivity. |
 | Cheeks and preview | Cheek puff, mouth shape and upper body nod controls. Cheek deformation requires rig data. |
 | Streaming | Avatar zoom and position, synchronized from Live to the OBS stream. |
@@ -88,8 +88,8 @@ npx playwright install chromium
    > Follow docs/agent-guide.md in order to create an avatar from projects/my-avatar/source.png. Include coordinate calibration, zoomed grids, rig overlays, validation, layer building and visual pose review. Report any remaining defects.
 
 2. Choose the result in **Open project**. Check **Pose test** and **Lip sync**, then drag the part handles to fix placement. After changing layer-dependent outlines, use **Save and rebuild layers**.
-3. Under **Drawn variants**, select eyes, mouths or expressions and copy the Codex request. If image generation is available, the agent can create and import drawings using the source and masks. Explicit permission is required before transmitting images. Without image generation, prepare the local masks/prompts and import manually prepared PNGs.
-4. Drawn head views are a separate advanced task. Follow the [fork workflow guide](docs/fork-workflows.md) to prepare each view's rig/sprites and review transitions. The eyes/mouth request does not automatically create angle-specific artwork.
+3. Default Codex delivery includes edited blinking/speaking images and up/down/left/right head drawings. After explaining the set and obtaining image-transfer consent once, Codex generates, rigs, imports and visually reviews it. Unavailable generation is reported as pending artwork. Use **Drawn variants** for subsequent edits or optional expressions.
+4. Each head drawing receives its own rig and eye/mouth sprites inside the SAME project, registered by `head-views.py pack`. Follow [automatic authoring](docs/codex-authoring.md); the [fork workflow guide](docs/fork-workflows.md) retains the legacy manual pitch-only path.
 
 A roughly front-facing, head-and-shoulders PNG with transparency works best. Each illustration needs rig, mask and alignment adjustments; quality is not automatically guaranteed. Follow the [agent guide](docs/agent-guide.md) and [rig field reference](docs/rig-fields.md).
 
