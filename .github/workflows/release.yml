@@ -9,7 +9,8 @@ concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 jobs:
   release:
-    if: github.ref == 'refs/heads/main'
+    # Forks retain the upstream npm package names and must configure their own releases.
+    if: github.repository == 'shinshin86/mesh-avatar-studio' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
