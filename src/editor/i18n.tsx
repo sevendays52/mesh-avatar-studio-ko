@@ -2,9 +2,10 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { readPreference, savePreference } from './preferences';
 import { workflowEn, workflowJa } from './workflow-i18n';
 import { uiZh, workflowZh, partsZh, fieldsZh } from './i18n-zh';
+import { uiKo, workflowKo, partsKo, fieldsKo } from './i18n-ko';
 export { readPreference, savePreference } from './preferences';
 
-export type Language = 'en' | 'ja' | 'zh';
+export type Language = 'en' | 'ja' | 'zh' | 'ko';
 export const LANGUAGE_KEY = 'mesh-avatar-language';
 export const GUIDE_KEY = 'mesh-avatar-guide-seen';
 
@@ -33,6 +34,7 @@ const en = {
   lipSpeed: 'Morae per second', lipLoop: 'Loop', skippedKana: 'Skipped characters:', lipHelp: 'Hiragana, katakana and spaces. Preview only; no audio.',
   sweepTip: 'Swings the head through its full range to find tears',
   turn: 'Turn left/right', look: 'Look up/down', tilt: 'Tilt', eyeOpen: 'Eyes open', mouthOpen: 'Mouth open', bodyTilt: 'Body tilt',
+  mouthForm: 'Mouth shape', cheekPuff: 'Puff cheeks', bodyNod: 'Upper body nod',
   loading: 'Loading local assets…', updating: 'Updating preview…', ready: 'Engine ready', previewError: 'Preview could not load',
   selection: 'Selected part', selectedItem: 'Selected rig item', selectPart: 'Select a part to edit it', tip: 'Tip',
   guideTitle: 'Three steps to your first edit', guide1: 'Pick a part on the left', guide2: 'Drag its dots on the image',
@@ -76,6 +78,7 @@ const ja: typeof en = {
   lipSpeed: '1秒あたりの拍数', lipLoop: '繰り返し', skippedKana: '読み飛ばす文字:', lipHelp: 'ひらがな・カタカナ・空白に対応。音声は再生しません。',
   sweepTip: '頭を最大角度まで動かし、画像の隙間や破れを確認します',
   turn: '顔を左右に向ける', look: '顔を上下に向ける', tilt: '頭を傾ける', eyeOpen: '目の開き', mouthOpen: '口の開き', bodyTilt: '体を傾ける',
+  mouthForm: '口の形', cheekPuff: '頬を膨らませる', bodyNod: '上体のうなずき',
   loading: '画像を読み込み中…', updating: 'プレビューを更新中…', ready: 'プレビューの準備完了', previewError: 'プレビューを読み込めませんでした',
   selection: '選択パーツ', selectedItem: '選択するパーツ', selectPart: 'パーツを選んで編集してください', tip: '調整のコツ',
   guideTitle: '最初の編集は3ステップ', guide1: '左の一覧からパーツを選ぶ', guide2: '画像の点をドラッグする',
@@ -95,9 +98,11 @@ const ja: typeof en = {
   accessory: '飾り', x: '横', y: '縦', px: '画素',
 };
 const zh: typeof en = { ...workflowZh, ...uiZh };
-export const dictionaries = { en, ja, zh };
+const ko: typeof en = { ...workflowKo, ...uiKo };
+export const dictionaries = { en, ja, zh, ko };
 export type PartGroup = 'head' | 'eyes' | 'mouth' | 'face' | 'cheeks' | 'strands' | 'buns' | 'accessories' | 'body' | 'hand' | 'mesh' | 'view';
 const partText: Record<Language, Record<PartGroup, [string, string, string]>> = {
+  ko: partsKo,
   zh: partsZh,
   en: {
     head: ['Head turn', 'Area that moves when the face turns or tilts.', 'Place the centre in the middle of the face; the circle should cover the whole head including hair.'],
@@ -133,6 +138,11 @@ const fieldText: Record<string, [string, string]> = {
   center: ['Centre', '中心'], pivot: ['Pivot', '支点'], rx: ['Horizontal radius', '横の半径'], ry: ['Vertical radius', '縦の半径'],
   cx: ['Centre X', '中心の横位置'], cy: ['Centre Y', '中心の縦位置'], shiftX: ['Horizontal travel', '横の移動量'], shiftY: ['Vertical travel', '縦の移動量'],
   pivotX: ['Pivot X', '支点の横位置'], pivotY: ['Pivot Y', '支点の縦位置'], maxRoll: ['Maximum tilt', '最大の傾き'],
+  pitch: ['Head nod', 'うなずき'], maxAngle: ['Maximum nod angle (rad)', 'うなずきの最大角度 (rad)'], depth: ['Face depth (px)', '顔の奥行き (px)'],
+  facePreservation: ['Preserve face proportions', '顔の比率を保つ'],
+  views: ['Drawn head views', '頭の角度の描き分け'], angleY: ['Drawing angle (deg)', '描画の基準角度 (度)'],
+  motion: ['Torso follow', '上体の追従'], nod: ['Nod travel', 'うなずきの移動量'], shoulder: ['Shoulder travel', '肩の移動量'],
+  turn: ['Turn travel', '横の移動量'], cheekPuff: ['Cheek puff', '頬の膨らみ'], regions: ['Cheek regions', '頬の範囲'], displacement: ['Outward travel', '外側への移動量'],
   weightBand: ['Head blend range', '頭の影響範囲'], turnBand: ['Turn blend range', '顔の向きの影響範囲'], breathBand: ['Breathing range', '呼吸の影響範囲'],
   rollBand: ['Body tilt range', '体の傾きの影響範囲'], chest: ['Chest', '胸'], shoulders: ['Shoulders', '肩'],
   nose: ['Nose', '鼻'], eyeA: ['First eye', '目の1番目'], eyeB: ['Second eye', '目の2番目'], earL: ['Left ear', '左耳'], earR: ['Right ear', '右耳'],
@@ -162,20 +172,20 @@ export function fieldTitle(path: string, language: Language) {
       if (key === 'accessories') return t.accessory;
       if (key in parts) return parts[key as PartGroup][0];
     }
-    return language === 'zh' ? fieldsZh[key] ?? key : fieldText[key]?.[language === 'en' ? 0 : 1] ?? key;
+    return language === 'ko' ? fieldsKo[key] ?? key : language === 'zh' ? fieldsZh[key] ?? key : fieldText[key]?.[language === 'en' ? 0 : 1] ?? key;
   }).join(' · ');
 }
 const Context = createContext({ language: 'en' as Language, setLanguage: (_: Language) => { void _; } });
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [language, setLanguage] = useState<Language>(() => {
-    const saved = readPreference(LANGUAGE_KEY);
-    return saved === 'ja' || saved === 'zh' ? saved : 'en';
+    const saved = readPreference(LANGUAGE_KEY) ?? new URLSearchParams(location.search).get('lang');
+    return saved === 'ja' || saved === 'zh' || saved === 'ko' ? saved : 'en';
   });
   useEffect(() => { document.documentElement.lang = language === 'zh' ? 'zh-CN' : language; savePreference(LANGUAGE_KEY, language); }, [language]);
   return <Context.Provider value={{ language, setLanguage }}>{children}</Context.Provider>;
 }
 export function useI18n() {
   const context = useContext(Context);
-  return { ...context, t: dictionaries[context.language], parts: partText[context.language], locale: { en: 'en-GB', ja: 'ja-JP', zh: 'zh-CN' }[context.language],
+  return { ...context, t: dictionaries[context.language], parts: partText[context.language], locale: { en: 'en-GB', ja: 'ja-JP', zh: 'zh-CN', ko: 'ko-KR' }[context.language],
     title: (path: string) => fieldTitle(path, context.language) };
 }

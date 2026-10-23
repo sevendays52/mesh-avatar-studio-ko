@@ -2,6 +2,15 @@
 
 Details behind the workflow in the [README](../README.md).
 
+## Interface language
+
+Use the language buttons in the editor or Live header to choose English, 日本語,
+简体中文 or **한국어**. The choice is saved in this browser and used when opening the
+other page or reloading. Korean covers editing tools, part and field descriptions,
+help, image requests, avatar import/export, lighting and Live controls.
+In Korean, vowel buttons are labelled 아/이/우/에/오/닫힘; the text playback field still
+accepts Japanese kana, as indicated in its help text.
+
 ## Projects
 
 Open the local URL printed by Vite. Choose **Open project** and select a project from the local
@@ -87,6 +96,8 @@ may need manual retouching. Inpainting approximates the artwork hidden behind ha
 - **Save rig** saves a listed project, or downloads the JSON for a browser-picked folder.
   Dropping a JSON file also loads it.
 - Pause **Idle motion** for a stable pose comparison, or use **Sweep angles** to sweep angles.
+- In **Pose test**, raise **Mouth open**, then move **Mouth shape** to
+  check a wide, neutral or rounded mouth. Held vowels own both controls until released.
 - Switch between the **Pose test** and **Lip sync** tabs under the preview. **Lip sync**
   holds あ・い・う・え・お・ん, or plays kana text at 4–12 morae per second.
   **Release** / **Stop** return control to the pose sliders. Drawn mouth images are used when

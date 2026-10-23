@@ -117,7 +117,7 @@ main:has(.project-location):has(.stale) .editor-panel { height: calc(100dvh - 21
 .pose-actions { display: flex; gap: 8px; }
 .reset-pose { color: var(--accent); padding: 6px 8px; font-size: 12px; }
 .pose-actions .sweep-button { flex: 1; width: auto; }
-.sliders { display: grid; gap: 0; margin: 6px 0; }
+.sliders { display: grid; gap: 0; margin: 6px 0; max-height: 140px; overflow-y: auto; scrollbar-width: thin; }
 .sliders label { display: grid; grid-template-columns: 120px minmax(0, 1fr) 32px; gap: 8px; align-items: center; min-height: 20px; font-size: 12px; }
 .sliders input { min-width: 0; width: 100%; accent-color: var(--accent); margin: 0; }
 .sliders output { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }

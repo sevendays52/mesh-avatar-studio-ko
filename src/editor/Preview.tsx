@@ -14,6 +14,8 @@ const sliders = [
   { id: 'angleZ', label: 'tilt', min: -30, max: 30, def: 0 },
   { id: 'EyeOpen', label: 'eyeOpen', min: 0, max: 1.25, def: 1 },
   { id: 'mouthOpen', label: 'mouthOpen', min: 0, max: 1, def: 0 },
+  { id: 'mouthForm', label: 'mouthForm', min: -1, max: 1, def: 0 },
+  { id: 'cheekPuff', label: 'cheekPuff', min: 0, max: 1, def: 0 },
   { id: 'bodyAngleZ', label: 'bodyTilt', min: -10, max: 10, def: 0 },
 ] as const;
 type Vowel = 'a' | 'i' | 'u' | 'e' | 'o' | 'n';
@@ -34,6 +36,7 @@ export function Preview({ projectKey, rig, assets, hasMouthSprites, onDrawMouth 
   const [speed, setSpeed] = useState(7);
   const [loop, setLoop] = useState(false);
   const [liveMouth, setLiveMouth] = useState(0);
+  const [liveMouthForm, setLiveMouthForm] = useState(0);
   const [tab, setTab] = useState<'pose' | 'lip'>('pose');
   const [lightingOpen, setLightingOpen] = useState(false);
   const skipped = skippedKanaCharacters(text).join(' ');
@@ -95,6 +98,7 @@ export function Preview({ projectKey, rig, assets, hasMouthSprites, onDrawMouth 
       if (lip) {
         const state = value.getLipSyncState();
         setLiveMouth(Math.round(state.open * 100) / 100);
+        setLiveMouthForm(Math.round(state.form * 100) / 100);
         if (!state.active) setLip(null);
       }
       raf = requestAnimationFrame(frame);
@@ -124,18 +128,18 @@ export function Preview({ projectKey, rig, assets, hasMouthSprites, onDrawMouth 
       </div>
       <div className="pose-test" id="pose-panel" role="tabpanel" aria-labelledby="pose-tab" hidden={tab !== 'pose'}>
       <div className="sliders">
-        {sliders.map(slider => (
+        {sliders.filter(slider => slider.id !== 'cheekPuff' || !!rig.cheekPuff).map(slider => (
           <label key={slider.id}>{t[slider.label]}
             <input type="range" aria-label={t[slider.label]} min={slider.min} max={slider.max} step="0.05"
-              disabled={slider.id === 'mouthOpen' && lip !== null}
-              value={slider.id === 'mouthOpen' && lip ? liveMouth : parameters[slider.id === 'EyeOpen' ? 'eyeLOpen' : slider.id] ?? slider.def}
+              disabled={(slider.id === 'mouthOpen' || slider.id === 'mouthForm') && lip !== null}
+              value={slider.id === 'mouthOpen' && lip ? liveMouth : slider.id === 'mouthForm' && lip ? liveMouthForm : parameters[slider.id === 'EyeOpen' ? 'eyeLOpen' : slider.id] ?? slider.def}
               onChange={event => {
                 const value = Number(event.target.value);
                 setParameters(current => slider.id === 'EyeOpen'
                   ? { ...current, eyeLOpen: value, eyeROpen: value }
                   : { ...current, [slider.id]: value });
               }} />
-            <output>{(slider.id === 'mouthOpen' && lip ? liveMouth : parameters[slider.id === 'EyeOpen' ? 'eyeLOpen' : slider.id] ?? slider.def).toFixed(2)}</output>
+            <output>{(slider.id === 'mouthOpen' && lip ? liveMouth : slider.id === 'mouthForm' && lip ? liveMouthForm : parameters[slider.id === 'EyeOpen' ? 'eyeLOpen' : slider.id] ?? slider.def).toFixed(2)}</output>
           </label>
         ))}
       </div>
@@ -145,7 +149,7 @@ export function Preview({ projectKey, rig, assets, hasMouthSprites, onDrawMouth 
       <div className="lip-sync" id="lip-panel" role="tabpanel" aria-labelledby="lip-tab" hidden={tab !== 'lip'}>
         <div className="vowel-buttons" role="group" aria-label={t.lipSync}>
           {(Object.keys(VOWELS) as Vowel[]).map(vowel => <button key={vowel} aria-pressed={lip?.kind === 'hold' && lip.vowel === vowel}
-            onClick={() => setLip(current => current?.kind === 'hold' && current.vowel === vowel ? null : { kind: 'hold', vowel })}>{VOWELS[vowel].label}</button>)}
+            onClick={() => setLip(current => current?.kind === 'hold' && current.vowel === vowel ? null : { kind: 'hold', vowel })}>{language === 'ko' ? ({ a: '아', i: '이', u: '우', e: '에', o: '오', n: '닫힘' })[vowel] : VOWELS[vowel].label}</button>)}
           <button onClick={() => setLip(null)}>{t.release}</button>
         </div>
         <div className="lip-text-row"><input aria-label={t.lipText} value={text} onChange={event => setText(event.target.value)} />

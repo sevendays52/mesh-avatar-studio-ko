@@ -40,4 +40,18 @@ const zh: typeof en = {
   playbackOnly: '缺少原图：仅支持播放，无法编辑或重新生成图层。',
   playbackBadge: '仅播放', imported: '已导入：', noSourceHelp: '即使不包含原图，文件仍保留图层图像。',
 };
-export const archiveText = { en, ja, zh };
+const ko: typeof en = {
+  exportTitle: '.mavatar 내보내기', exportButton: '.mavatar 다운로드', saveExport: '저장하고 내보내기',
+  includeSource: '원본 이미지 포함', sourceHelp: '나중에 Studio에서 편집하려면 원본 일러스트를 포함하세요.',
+  savedHelp: '저장된 리그, 생성된 레이어와 표정 그림을 내보냅니다.',
+  originalHelp: '원본 파일을 내보냅니다. 읽기 전용 화면에서 수정한 내용은 포함되지 않습니다.',
+  saveHelp: '현재 편집 내용을 저장한 뒤 내보냅니다.',
+  rebuildHelp: '윤곽이 변경됐습니다. 편집 내용을 내보내려면 레이어를 먼저 다시 만드세요.',
+  exportUnavailable: '내보내려면 로컬 개발 서버나 브라우저에서 연 폴더가 필요합니다.',
+  importTitle: '.mavatar 가져오기', importHelp: '파일을 선택하거나 여기에 놓으세요. 새 로컬 프로젝트를 만듭니다.',
+  importUnavailable: '가져오려면 로컬 개발 서버(npm run dev)가 필요합니다.',
+  archiveFile: '아바타 압축 파일', busy: '처리 중…', failed: '아바타를 가져오거나 내보내지 못했습니다.', dismiss: '닫기',
+  playbackOnly: '원본 이미지가 없어 재생만 가능합니다. 편집과 레이어 재생성은 사용할 수 없습니다.',
+  playbackBadge: '재생 전용', imported: '가져온 프로젝트:', noSourceHelp: '원본 이미지를 제외해도 생성된 레이어 이미지는 파일에 남습니다.',
+};
+export const archiveText = { en, ja, zh, ko };

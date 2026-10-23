@@ -45,4 +45,14 @@ describe('environment check', () => {
     expect(report).toContain('⚠ Playwright の Chromium が見つかりません。エディタと配信画面はこのまま使えます。');
     expect(report).toContain('エディタは次のコマンドで起動できます: npm run dev');
   });
+
+  test('reports in Korean, with explicit flags taking precedence over locale', async () => {
+    expect([language(['--lang', 'ko'], { LANG: 'en_US.UTF-8' }), language(['--lang=ko'], {}), language([], { LANG: 'ko_KR.UTF-8' }), language(['--lang=en'], { LANG: 'ko_KR.UTF-8' }), language(['ko'], { LANG: 'ja_JP.UTF-8' })]).toEqual(['ko', 'ko', 'ko', 'en', 'ja']);
+    expect(formatReport(await checkEnvironment('ko', ready), 'ko')).toContain('준비가 완료됐습니다');
+    const report = formatReport(await checkEnvironment('ko', { ...ready, uv: async () => null, chromium: async () => false }), 'ko');
+    expect(report).toContain('uv가 없어 Python을 확인하지 않았습니다.');
+    expect(report).toContain('npx playwright install chromium');
+    expect(report).toContain('편집기 실행: npm run dev');
+    expect(formatReport(await checkEnvironment('ko', { ...ready, packages: async () => false }), 'ko')).toContain('위 오류를 해결하세요');
+  });
 });

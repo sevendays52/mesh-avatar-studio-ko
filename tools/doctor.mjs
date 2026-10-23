@@ -45,13 +45,32 @@ const text = {
     warned: 'エディタは次のコマンドで起動できます: npm run dev\nアバターを作る前に、警告の付いたツールをインストールしてください。',
     passed: 'すべて揃っています。次のコマンドでエディタを起動できます: npm run dev',
   },
+  ko: {
+    title: 'Mesh Avatar Studio 환경 점검',
+    node: version => `Node.js ${version}`,
+    nodeOld: version => `Node.js ${MIN_NODE.join('.')} 이상이 필요합니다(현재 ${version}). 설치: https://nodejs.org/`,
+    packages: '패키지가 설치되어 있습니다',
+    packagesMissing: '패키지가 없습니다. 실행: npm install',
+    uv: version => `uv ${version}`,
+    uvMissing: 'uv가 없습니다. 편집기는 사용할 수 있지만 레이어 재생성과 아바타 제작에는 필요합니다.\n  설치: https://docs.astral.sh/uv/getting-started/installation/',
+    python: version => `Python ${version} (uv로 확인)`,
+    pythonMissing: 'uv에서 Python 3.10 이상을 찾지 못했습니다. 편집기는 사용할 수 있지만 레이어 재생성과 아바타 제작에는 필요합니다.\n  설치: uv python install 3.12',
+    pythonSkipped: 'uv가 없어 Python을 확인하지 않았습니다.',
+    pythonFreeThreaded: version => `uv가 자유 스레드 Python ${version}을 선택합니다. OpenCV 설치와 레이어 재생성이 실패할 수 있습니다.\n  일반 버전 설치: uv python install 3.13`,
+    chromium: 'Playwright Chromium',
+    chromiumMissing: 'Playwright Chromium이 없습니다. 편집기와 Live는 사용할 수 있습니다.\n  에이전트의 아바타 제작과 눈·입 그림 적용 후 포즈 검토에 필요합니다.\n  설치: npx playwright install chromium',
+    failed: '편집기를 시작하기 전에 위 오류를 해결하세요.',
+    warned: '편집기 실행: npm run dev\n아바타를 만들기 전에 경고에 표시된 도구를 설치하세요.',
+    passed: '준비가 완료됐습니다. 편집기 실행: npm run dev',
+  },
 };
 
 export function language(argv = process.argv.slice(2), env = process.env) {
-  const flag = argv.find(arg => arg.startsWith('--lang='))?.slice(7) ?? argv[argv.indexOf('--lang') + 1];
-  if (flag === 'ja' || flag === 'en') return flag;
+  const index = argv.indexOf('--lang');
+  const flag = argv.find(arg => arg.startsWith('--lang='))?.slice(7) ?? (index >= 0 ? argv[index + 1] : undefined);
+  if (flag === 'ja' || flag === 'en' || flag === 'ko') return flag;
   const locale = env.LC_ALL || env.LC_MESSAGES || env.LANG || Intl.DateTimeFormat().resolvedOptions().locale;
-  return /^ja/i.test(locale ?? '') ? 'ja' : 'en';
+  return /^ko/i.test(locale ?? '') ? 'ko' : /^ja/i.test(locale ?? '') ? 'ja' : 'en';
 }
 
 export function nodeVersionOk(version) {
