@@ -88,6 +88,26 @@ class AgentToolsTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 grid_image(image, [-1, 0, 50, 60])
 
+    def test_sprite_rebuild_preserves_drawn_pitch_views(self):
+        variants = self.project / "variants"
+        variants.mkdir()
+        Image.open(self.project / "source.png").save(variants / "mouth_a.png")
+        output = self.project / "built/sprites"
+        output.mkdir(parents=True)
+        name = "pitch_view_down_base"
+        Image.new("RGBA", (100, 100), (20, 30, 40, 255)).save(output / f"{name}.png")
+        before = (output / f"{name}.png").read_bytes()
+        view = {"down": {"rig": {"version": 1}, "layers": {"base": name}}}
+        morph = [{"from": "neutral", "to": "down", "grid": {}, "forward": [], "backward": []}]
+        (output / "sprites.json").write_text(json.dumps({"build": "before", "layers": {name: [0, 0, 100, 100]}, "pitchViews": view, "pitchMorphs": morph}))
+        sprites.build(self.project)
+        after = json.loads((output / "sprites.json").read_text())
+        self.assertEqual(after["pitchViews"], view)
+        self.assertEqual(after["pitchMorphs"], morph)
+        self.assertEqual(after["layers"][name], [0, 0, 100, 100])
+        self.assertIn("mouth_a", after["layers"])
+        self.assertEqual((output / f"{name}.png").read_bytes(), before)
+
     def test_new_project_warns_and_refuses_replacement_or_unsafe_names(self):
         name = self.project.name + "-new"
         created = ROOT / "projects" / name

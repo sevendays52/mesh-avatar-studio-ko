@@ -7,6 +7,9 @@ import { OVERLAY_EXPRESSIONS } from './expression-overlay.js';
 export type LiveExpression = keyof typeof OVERLAY_EXPRESSIONS;
 export const LIVE_EXPRESSIONS = Object.keys(OVERLAY_EXPRESSIONS) as LiveExpression[];
 
+/** Zoom about the canvas centre; x/y translate in canvas widths/heights, positive right/down. */
+export interface AvatarViewport { zoom: number; x: number; y: number }
+
 export interface MeshAvatarOptions {
   rig: Rig;
   assetsBase?: string;
@@ -16,9 +19,11 @@ export interface MeshAvatarOptions {
   padSide?: number;
   fit?: 'contain' | 'cover';
   preserveMouthForm?: boolean;
+  viewport?: Partial<AvatarViewport>;
 }
 export interface MeshAvatar {
   readonly motions: { id: string; label: string; idle: boolean }[];
+  setViewport(value: Partial<AvatarViewport>): void;
   setLighting(settings: Partial<LightingSettings>): void;
   getLightingStats(): { normalMs: number; computedLayers: number; cachedLayers: number };
   setParameters(parameters: Record<string, number>, weight?: number): void;

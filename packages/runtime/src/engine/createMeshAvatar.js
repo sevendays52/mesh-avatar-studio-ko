@@ -8,6 +8,8 @@ import { createSpriteModule, eyeMood } from './sprites.js';
 import { Motion } from './motion.js';
 import { ExpressionOverlay } from './expression-overlay.js';
 import { MOTIONS, IDLE_MOTIONS } from './motions.js';
+import { parseViewport } from './viewport.js';
+import { createPitchViewAvatar } from './pitch-views.js';
 
 const EYE_PARTS = ['ball', 'low', 'crease', 'lash'];   // back to front
 
@@ -67,6 +69,7 @@ export async function createMeshAvatarImpl(canvas, options) {
   }
   const rig = options.rig;
   const engine = createRig(rig);
+  if (options._headMorphSources) engine.setHeadMorphSources(options._headMorphSources);
   const { IMG, EYES, baseWeights, deformBase, eyePartY, eyePartAlpha,
     handWeights, handFrame, deformHand, TASSELS } = engine;
   const { Renderer, buildGrid } = createRenderer(engine, rig);
@@ -80,7 +83,11 @@ export async function createMeshAvatarImpl(canvas, options) {
     }
     return `${base}${name}${build === undefined ? '' : `?b=${build}`}`;
   };
-  const meta = await loadJson(asset('layers.json'));
+  if (rig.head.pitch?.views?.length) {
+    const sheet = await loadJson(asset('sprites/sprites.json'));
+    return createPitchViewAvatar(canvas, options, sheet, asset, createMeshAvatarImpl);
+  }
+  const meta = options._metadata ?? await loadJson(asset('layers.json'));
 
   const names = ['base', ...(rig.hand ? ['hand'] : []), ...TASSELS.map(t => t.name), ...[0, 1].flatMap(i => EYE_PARTS.map(p => `eye${i}_${p}`)), 'hairmask'];
   const imgs = Object.fromEntries(await Promise.all(names.map(async n => [n, await loadImage(asset(`${n}.png`, meta.build))])));
@@ -91,6 +98,7 @@ export async function createMeshAvatarImpl(canvas, options) {
   // keeps the top ~88px (7%) above the canvas, which the layout puts at the top of the panel:
   // the cut stays off screen even at the deepest head tilt.
   const R = new Renderer(canvas, { padTop: options.padTop ?? rig.view.padTop, padSide: options.padSide ?? rig.view.padSide, fit: options.fit });
+  R.viewport = parseViewport(options.viewport);
   const rects = { base: [0, 0, IMG.w, IMG.h], ...meta.layers };
 
   // base layer, denser where hair strands bend and the face parts shift
@@ -119,10 +127,12 @@ export async function createMeshAvatarImpl(canvas, options) {
   let sprites = null;
   try {
     {
-      const sheet = await loadJson(asset('sprites/sprites.json'));
-      const simgs = Object.fromEntries(await Promise.all(Object.keys(sheet.layers).map(async n =>
-        [n, await loadImage(asset(`sprites/${n}.png`, sheet.build))])));
-      sprites = createSprites(R, sheet, simgs, buildGrid, alphaOf);
+      const sheet = options._sprites === undefined ? await loadJson(asset('sprites/sprites.json')) : options._sprites;
+      if (sheet) {
+        const simgs = Object.fromEntries(await Promise.all(Object.keys(sheet.layers).map(async n =>
+          [n, await loadImage(asset(`sprites/${n}.png`, sheet.build))])));
+        sprites = createSprites(R, sheet, simgs, buildGrid, alphaOf);
+      }
     }
   } catch (err) {
     console.warn('eye / mouth sprites not loaded:', err);
@@ -160,8 +170,11 @@ export async function createMeshAvatarImpl(canvas, options) {
     return out;
   }
   function tick(dt) {
-    const P = updateParameters(dt);
+    renderParameters(updateParameters(dt), dt);
+  }
+  function renderParameters(P, dt, draw = true, mood = eyeMood(expression.name, motion.mode === 'manual' ? null : motion.expr)) {
     const phys = physics.step(P, dt);
+    if (!draw) return;
 
     const bp = baseMesh.pos, br = baseMesh.rest;
     for (let i = 0; i < baseW.length; i++) {
@@ -183,7 +196,7 @@ export async function createMeshAvatarImpl(canvas, options) {
       }
     }
     // the motion expression is not applied in manual mode, so only the live one counts there
-    const cover = sprites?.update(P, phys, dt, eyeMood(expression.name, motion.mode === 'manual' ? null : motion.expr));
+    const cover = sprites?.update(P, phys, dt, mood);
     if (cover) for (const ep of eyeParts) if (cover.eyes[ep.eye]) ep.layer.alpha = 0;
     const hp = handMesh.pos, hr = handMesh.rest, HF = handFrame(P);
     for (let i = 0; i < handW.length; i++) {
@@ -221,8 +234,9 @@ export async function createMeshAvatarImpl(canvas, options) {
     ...Object.entries(IDLE_MOTIONS).map(([id, m]) => ({ id, label: m.label, idle: true })),
   ];
 
-  return {
+  const avatar = {
     motions: motionList,
+    setViewport(value) { R.viewport = parseViewport({ ...R.viewport, ...value }); },
     setParameters(values, weight = 1) { parameters = { ...values }; parameterWeight = Math.min(1, Math.max(0, Number(weight) || 0)); },
     getParameters() { return { ...lastParameters }; },
     /** 0..1 loudness of the voice being played (e.g. normalised RMS). */
@@ -269,4 +283,10 @@ export async function createMeshAvatarImpl(canvas, options) {
       // instance (React StrictMode mounts twice) and a canvas only ever has one context
     },
   };
+  Object.defineProperties(avatar, {
+    _spriteMood: { value: () => eyeMood(expression.name, motion.mode === 'manual' ? null : motion.expr) },
+    _setHeadWarp: { value: value => engine.setHeadWarp(value) },
+    _renderParameters: { value: renderParameters },
+  });
+  return avatar;
 }

@@ -2,6 +2,13 @@
 
 A WebGL runtime for 2D mesh avatars created with [Mesh Avatar Studio](https://github.com/shinshin86/mesh-avatar-studio). Load a `.mavatar` archive or an avatar folder into a canvas, then control its motion, voice level and expressions.
 
+Optional rig data enables cheek inflation (`cheekPuff: { regions: [leftEllipse,
+rightEllipse], displacement }`) via the `cheekPuff` parameter (0–1). Optional
+`body.motion: { turn, nod, shoulder }` adds secondary torso travel in source pixels;
+`bodyAngleY` (−10–10, positive up) controls its nod. Existing avatars without these
+fields render as before. See [rig fields](../../docs/rig-fields.md) for placement
+and validation constraints.
+
 For React and Next.js, use [mesh-avatar-react](https://github.com/shinshin86/mesh-avatar-studio/tree/main/packages/react).
 
 <p align="center">
@@ -71,6 +78,10 @@ avatar.setExpression('smile');
 // Apply tracked or posed parameters. Each call replaces the supplied overrides.
 avatar.setParameters({ angleX: 10, gazeX: 0.25 }, 1);
 
+// Optional framing: zoom about the canvas centre, then move right/down in canvas units.
+avatar.setViewport({ zoom: 2, x: 0, y: 0.3 });
+avatar.setViewport({ zoom: 1, x: 0, y: 0 }); // reset
+
 // When the line finishes, return to idle and clear overrides.
 avatar.setVoiceLevel(0);
 avatar.setSpeaking(false);
@@ -83,6 +94,36 @@ avatar.destroy();
 ```
 
 Emotion tags are `happy`, `sad`, `angry`, `surprised`, `relaxed` and `neutral` (or `null` to reset). Expressions are `neutral`, `smile`, `shy`, `surprise`, `halfLidded`, `angry`, `sad` and `wink`; `LIVE_EXPRESSIONS` exports that list. `PARAMS` exports the parameter IDs, ranges and defaults. Voice methods animate the avatar; your app handles audio playback.
+
+`createMeshAvatar` and `loadMeshAvatar` also accept an optional `viewport` setting.
+`setViewport` merges partial updates; `zoom` is clamped to 0.25–8 and `x`/`y` to −4–4.
+Offsets use canvas widths/heights, positive right/down. Framing changes the projection
+without increasing the framebuffer dimensions or modifying the rig. Omitted viewport
+settings preserve the existing rendering. The `AvatarViewport` type is exported.
+
+Avatars can opt into neck-centred nodding with `head.pitch: { maxAngle: 0.5, depth: 45 }`
+in their rig. `angleY` (−30 to +30 degrees; positive looks up) drives the projection;
+`maxAngle` is in radians (0–π/3) and `depth` is nonnegative source pixels. This adds
+head foreshortening and face depth to the existing vertical travel. Eye and mouth
+sprites follow the same transform. Omit `head.pitch` to keep legacy deformation;
+older runtimes ignore this optional data. See the [rig field reference](https://github.com/shinshin86/mesh-avatar-studio/blob/main/docs/rig-fields.md).
+
+Set `head.pitch.facePreservation` to `1` to preserve facial proportions on deep downward
+nods. The face moves together while the crown and neck blend into the pose. Values
+between `0` and `1` blend the effect; omission or `0` preserves previous pitch behavior.
+
+For newly visible surfaces such as the crown of a bowed head, use optional drawn views:
+`head.pitch.views: [{ id: 'down_half', angleY: -15 }, { id: 'down_full', angleY: -30 }]`.
+Optional `sprites.json.pitchMorphs` correspondence grids let these drawings morph
+continuously, aligning hair contours and facial details before blending. Without
+the grids, the existing nearest-view transition remains unchanged. See the
+[drawn view format](../../docs/format.md#drawn-pitch-views) for grid fields and validation.
+Each view supplies its own rig and layer aliases in `sprites.json.pitchViews`, so eyes
+and mouths remain animated at the new angle. Facial landmarks align between views;
+held angles use one drawing, and changes dissolve over 80ms with 1° selection hysteresis.
+All images remain ordinary sprite-manifest entries and are included in `.mavatar`
+exports. Existing avatars and older runtimes retain their previous behavior. See
+the [drawn view format](https://github.com/shinshin86/mesh-avatar-studio/blob/main/docs/format.md#drawn-pitch-views).
 
 `loadMeshAvatar` releases archives it opens on `destroy()` or load failure; when passed an existing `AvatarPackage` from `openAvatar`, the caller owns it and must call `release()` after its last user is destroyed.
 

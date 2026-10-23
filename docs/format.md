@@ -223,3 +223,65 @@ use `validateAvatarFiles` or `openAvatar` to validate the avatar contents.
 
 The stream view accepts `?avatar=<folder-or-.mavatar-URL>`. An explicit `project`
 query parameter takes precedence when both are present.
+
+
+## Drawn pitch views
+
+New head angles can use different drawings, with visible crown or under-chin surfaces,
+through the optional `rig.head.pitch.views` list. Neutral is implicit at `angleY: 0`;
+each additional view has a unique safe `id` and a unique nonzero angle between −30 and
+30 degrees. Up to four views are supported. For example:
+
+```json
+"views": [{ "id": "down_half", "angleY": -15 }, { "id": "down_full", "angleY": -30 }]
+```
+
+The corresponding optional `sprites.json.pitchViews` object maps each ID to:
+
+| Field | Meaning |
+| --- | --- |
+| `rig` | A complete version 1 rig for that drawing, including its sampled eye curves. Image size must match the neutral rig. Nested `head.pitch.views` are not allowed. |
+| `layers` | Map from ordinary layer names (`base`, `hairmask`, `eye0_ball`, etc.) to image keys in the top-level `sprites.json.layers` rectangle map. All rig-required layers must be provided. |
+| `sprites` | Optional map from ordinary expression sprite names (`eyes_closed_0`, `mouth_a`, etc.) to keys in the same top-level rectangle map. |
+
+View image keys use the reserved `pitch_view_` prefix, for example
+`pitch_view_down_half_base`. Each key still names an ordinary PNG under `built/sprites/`,
+with the normal integer rectangle and image bounds rules. `base` and `hairmask` view
+images are full-size. This keeps folder loading, archive export/import, and older
+readers compatible: older runtimes ignore the added fields and unknown sprite names.
+
+The runtime aligns crown, eye, mouth, jaw and neck landmarks as the requested angle
+changes. It selects the nearest drawing with 1° hysteresis and uses a brief 80ms
+premultiplied transition when that selection changes. A held angle displays one
+drawing, avoiding a permanent double silhouette. Eye clipping, drawn blinks, mouth
+shapes, body motion and physics run against each view's own rig. Shared body pixels
+should be preserved while preparing drawings to avoid changes below the neck.
+
+For continuous transitions, optional `sprites.json.pitchMorphs` supplies one
+correspondence grid for every adjacent pair of views (including the reserved
+`neutral` view). Each entry has `from`, `to`, `grid: { x, y, cell, cols, rows }`,
+`forward` and `backward`. The grid uses neutral source-image coordinates after
+the source view's landmark transform and head-weight fade. Fields are flat
+row-major `[dx, dy, ...]` arrays: forward maps `from` toward `to`, and backward
+maps `to` toward `from`. They describe matching painted features, not optical
+motion during playback. Derive both from the aligned source drawings locally.
+
+Grid coordinates and dimensions are integers, `cell >= 2`, dimensions >= 2, at
+most 4096 nodes, and the grid stays inside the source image. Both fields have
+exactly two finite numbers per node with magnitudes <= 64 px and zero boundary
+nodes. IDs must reference unique adjacent pairs; `neutral` cannot also be a
+drawn-view ID. Validate deformation and inspect intermediate poses: bounds alone
+do not guarantee a good correspondence field.
+
+With this optional data the runtime moves corresponding features toward shared
+positions before continuously blending adjacent views by angle. There is no
+nearest-view texture switch. Head yaw, roll, eyes, mouth, cheek puff and torso
+motion still use the same rendering path. Avatars without `pitchMorphs` retain
+the existing hysteresis and timed transition exactly. Older runtimes ignore the
+new metadata and continue to display their existing drawn views.
+
+`build-sprites.py` preserves existing `pitchViews`, `pitchMorphs` metadata and `pitch_view_` images
+when rebuilding ordinary expression sprites. When a pose source or its outlines
+change, rebuild that pose's layers/sprites and update its aliases and embedded rig.
+Avatar validation checks view metadata, required aliases, rig/image compatibility
+and referenced images. No new public playback methods are required.

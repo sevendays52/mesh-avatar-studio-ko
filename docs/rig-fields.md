@@ -10,7 +10,7 @@ radii and mesh cell sizes must be positive. Mesh cell sizes and fine-mesh rectan
 coordinates must be integers. Accessory boxes must be integer rectangles inside the image. A band is `[start, end]` with `start < end`.
 Ellipses are smooth influence regions, not hard cut-out boundaries.
 
-Only `buns`, `strands`, `accessories`, `hand` and `view.gazeCenter` are optional. Omit absent
+Only `buns`, `strands`, `accessories`, `hand`, `head.pitch`, `body.motion`, `cheekPuff` and `view.gazeCenter` are optional. Omit absent
 optional groups. Required regions must still be placed even if their animation will be small.
 The initial draft has empty eye polygons and is intentionally invalid until they are traced.
 See [agent-guide.md](agent-guide.md) for the process and [rig-mapping.md](rig-mapping.md) for
@@ -32,11 +32,17 @@ the engine mapping. Do not copy the example illustration's coordinates into a ne
 | `head.maxRoll` | Roll magnitude at a ±30° head pose, radians; start near `0.15`. |
 | `head.weightBand` | Y range, px, where head influence fades from full to zero; below chin to collarbone. |
 | `head.turnBand` | Y range, px, where face-turn displacement fades; below chin into upper chest. |
+| `head.pitch.maxAngle` | Optional neck-centred pitch projection at a ±30° `angleY` pose, radians, 0–π/3. Positive `angleY` looks up. Start near `0.45`; omit `head.pitch` to preserve legacy deformation. |
+| `head.pitch.depth` | Face-centre depth in front of the neck, px, nonnegative; fades smoothly toward the head ellipse rim and to zero at the neck pivot. Start near 20% of `head.ry`. Supply both pitch fields together. The projection adds to existing `shiftY` travel and follows `weightBand`. |
+| `head.pitch.facePreservation` | Optional 0–1 preservation of facial proportions while looking down. At `1`, brow/eye-to-jaw regions move together, with pitch blended into the crown and neck; travel is limited by space between the jaw region and the end of `weightBand`. The effect eases in over the first 15° of downward `angleY`. Omit or use `0` for exact previous pitch behavior. |
+| `head.pitch.views` | Optional list of 1–4 drawn angle views. Each entry has a safe unique `id` and unique nonzero `angleY` in −30…30 degrees; neutral `0` is implicit. Matching `pitchViews[id]` metadata and images live in `built/sprites/sprites.json`. Each drawing has its own rig and animated eye/mouth layers. See [format.md](format.md#drawn-pitch-views). |
 | `body.pivotX` | Body roll pivot x, px; middle of the lower torso. |
 | `body.pivotY` | Body roll pivot y, px; near the bottom of the image. |
 | `body.maxRoll` | Body rotation at a ±10° body pose, radians; start near `0.035`. |
 | `body.breathBand` | Y range, px, where breathing fades to zero; upper chest to bottom. |
 | `body.rollBand` | Y range, px, where body roll fades to zero; upper body to anchored lower torso. |
+| `body.motion` | Optional secondary torso travel in source pixels: nonnegative `turn` adds horizontal travel to `bodyAngleX`; `nod` adds vertical travel to `bodyAngleY` (−10…10, positive rises); `shoulder` adds extra vertical travel inside the shoulder ellipses. All fade out over `rollBand`, keeping the lower torso pinned. Supply all three fields together. Without this group, `bodyAngleY` has no effect and existing body motion is unchanged. |
+| `cheekPuff` | Optional mesh inflation independent of blush. `regions` contains two ellipses, ordered image-left then image-right, below the eyes and away from the mouth. `displacement` is outward travel in px at `cheekPuff=1` (control range 0…1); limited to half the smallest region radius to avoid folding. The compact smooth field rounds each cheek outward with a small downward bulge and follows head/body transforms. Configure each drawn pitch view separately. Omit this group for unchanged rendering. |
 | `body.chest.cx` | Chest centre x, px; centre of visible upper torso. |
 | `body.chest.cy` | Chest centre y, px; below neck and above lower torso. |
 | `body.chest.rx` | Chest horizontal radius, px; cover torso inside the arms. |

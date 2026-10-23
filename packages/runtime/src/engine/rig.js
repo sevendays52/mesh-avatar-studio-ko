@@ -1,8 +1,11 @@
+import { warpHeadPoint, cacheHeadMorph } from './head-warp.js';
+
 export const PARAMS = [
   { id: 'angleX', label: 'Face angle X', min: -30, max: 30, def: 0, group: 'Head and body' },
   { id: 'angleY', label: 'Face angle Y', min: -30, max: 30, def: 0, group: 'Head and body' },
   { id: 'angleZ', label: 'Face roll', min: -30, max: 30, def: 0, group: 'Head and body' },
   { id: 'bodyAngleX', label: 'Body angle X', min: -10, max: 10, def: 0, group: 'Head and body' },
+  { id: 'bodyAngleY', label: 'Body nod', min: -10, max: 10, def: 0, group: 'Head and body' },
   { id: 'bodyAngleZ', label: 'Body roll', min: -10, max: 10, def: 0, group: 'Head and body' },
   { id: 'breath', label: 'Breath', min: 0, max: 1, def: 0, group: 'Head and body' },
   { id: 'eyeLOpen', label: 'Left eye open', min: 0, max: 1.25, def: 1, group: 'Eyes and brows' },
@@ -15,6 +18,7 @@ export const PARAMS = [
   { id: 'mouthOpen', label: 'Mouth open', min: 0, max: 1, def: 0, group: 'Mouth and cheeks' },
   { id: 'mouthForm', label: 'Mouth form (i to o)', min: -1, max: 1, def: 0, group: 'Mouth and cheeks' },
   { id: 'blush', label: 'Blush', min: 0, max: 1, def: 0, group: 'Mouth and cheeks' },
+  { id: 'cheekPuff', label: 'Cheek puff', min: 0, max: 1, def: 0, group: 'Mouth and cheeks' },
   { id: 'armAngle', label: 'Arm angle', min: -10, max: 10, def: 0, group: 'Hand' },
   { id: 'handAngle', label: 'Wrist angle', min: -10, max: 10, def: 0, group: 'Hand' },
   { id: 'fingerTap', label: 'Finger tap', min: 0, max: 1, def: 0, group: 'Hand' },
@@ -94,8 +98,24 @@ export function createRig(rig) {
   // face so its rim falls in the background, and its slope is zero at the rim.
   const HEAD = rig.head;
   const BODY = rig.body;
+  const PUFF = rig.cheekPuff;
+  let headWarp = null;
+  let morphSources = null;
 
   const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+  // A face-preserving nod moves the visible face together. Derive its vertical
+  // extent from the authored facial regions instead of image-specific constants.
+  const faceTop = Math.min(rig.face.brow.cy - rig.face.brow.ry,
+    rig.face.eyeA.cy - rig.face.eyeA.ry, rig.face.eyeB.cy - rig.face.eyeB.ry);
+  const faceBottom = Math.max(rig.face.jaw.cy + rig.face.jaw.ry, rig.face.mouth.cy + rig.face.mouth.ry);
+  function facePreservation(x, y, P) {
+    if (!HEAD.pitch?.facePreservation || P.angleY >= 0) return 0;
+    const above = sstep(Math.min(HEAD.cy - HEAD.ry, faceTop - 1), faceTop, y);
+    const below = 1 - sstep(faceBottom, Math.max(faceBottom + 1, HEAD.weightBand[1]), y);
+    const side = 1 - sstep(0.65, 1, Math.abs((x - HEAD.cx) / HEAD.rx));
+    return HEAD.pitch.facePreservation * sstep(0, 0.5, -P.angleY / 30) * above * below * side;
+  }
 
   function headWeight(x, y) { return 1 - sstep(...HEAD.weightBand, y); }
   // The turn bump already fades out towards its rim, so it only needs a gentle cut-off
@@ -158,6 +178,11 @@ export function createRig(rig) {
       chest: gaussian(x, y, BODY.chest),
       breath: 1 - sstep(...BODY.breathBand, y),
       shoulder: BODY.shoulders.reduce((sum, area) => sum + gaussian(x, y, area), 0),
+      ...(morphSources && { morphs: Object.fromEntries(morphSources.map(m => [m.key, cacheHeadMorph(x, y, m)])) }),
+      ...(PUFF && { puff: PUFF.regions.map(area => {
+        const r2 = ((x - area.cx) / area.rx) ** 2 + ((y - area.cy) / area.ry) ** 2;
+        return Math.max(0, 1 - r2) ** 3;
+      }) }),
     };
   }
 
@@ -180,8 +205,36 @@ export function createRig(rig) {
   }
 
   // Head transform with weight w (0 = body, 1 = fully head). Mutates p.
-  function applyHead(p, w, P, wTurn = w) {
-    const o = turnOffset(p[0], p[1], P.angleX / 30, P.angleY / 30);
+  function applyHead(p, w, P, wTurn = w, morphs = undefined) {
+    if (headWarp) {
+      const o = turnOffset(p[0], p[1], P.angleX / 30, 0);
+      p[0] += o[0] * wTurn; p[1] += o[1] * wTurn;
+      if (w <= 0) return;
+      const q = warpHeadPoint(p[0], p[1], headWarp, morphs?.[headWarp.morph?.key]);
+      p[0] += (q[0] - p[0]) * w; p[1] += (q[1] - p[1]) * w;
+      const pivot = warpHeadPoint(HEAD.pivotX, HEAD.pivotY, headWarp);
+      if (w > 0) rotateAround(p, pivot[0], pivot[1], -P.angleZ / 30 * HEAD.maxRoll * w);
+      return;
+    }
+    const preserve = facePreservation(p[0], p[1], P);
+    // Opt-in orthographic pitch around the neck. The smooth depth field keeps the
+    // contour continuous while the face moves in front of the hair. All layers and
+    // physics anchors share this transform; absent data preserves legacy arithmetic.
+    if (HEAD.pitch && HEAD.pitch.maxAngle !== 0 && P.angleY !== 0 && w > 0) {
+      const a = Math.max(-1, Math.min(1, P.angleY / 30)) * HEAD.pitch.maxAngle;
+      const nx = (p[0] - HEAD.cx) / HEAD.rx, ny = (p[1] - HEAD.cy) / HEAD.ry;
+      const neck = sstep(0, 1, (HEAD.pivotY - p[1]) / Math.max(1, HEAD.pivotY - HEAD.cy));
+      const depth = HEAD.pitch.depth * sstep(0, 0.84, 1 - nx * nx - ny * ny) * neck;
+      let offset = (p[1] - HEAD.pivotY) * (Math.cos(a) - 1) - depth * Math.sin(a);
+      if (preserve > 0) {
+        // Keep room for a smooth neck transition instead of pushing the chin into
+        // the fixed torso. Forehead/hair retain pitch while the face translates.
+        const travel = Math.min(HEAD.pitch.depth, Math.max(0, HEAD.weightBand[1] - faceBottom) * 0.5);
+        offset += (-Math.sin(a) * travel - offset) * preserve;
+      }
+      p[1] += offset * w;
+    }
+    const o = turnOffset(p[0], p[1], P.angleX / 30, P.angleY / 30 * (1 - preserve));
     p[0] += o[0] * wTurn; p[1] += o[1] * wTurn;
     if (w <= 0) return;
     rotateAround(p, HEAD.pivotX, HEAD.pivotY, -P.angleZ / 30 * HEAD.maxRoll * w);
@@ -193,6 +246,11 @@ export function createRig(rig) {
     p[1] -= b * (5 * breathW + 4 * shoulder);
     p[0] += (p[0] - BODY.chest.cx) * 0.012 * b * chest;
     p[0] += P.bodyAngleX / 10 * (7 + 9 * chest);
+    if (BODY.motion) {
+      const follow = 1 - sstep(...BODY.rollBand, restY);
+      p[0] += P.bodyAngleX / 10 * BODY.motion.turn * (0.35 + 0.65 * chest) * follow;
+      p[1] -= (P.bodyAngleY ?? 0) / 10 * (BODY.motion.nod * breathW + BODY.motion.shoulder * shoulder) * follow;
+    }
     // bottom rows stay put so no gap opens at the cut-off edge of the image
     rotateAround(p, BODY.pivotX, BODY.pivotY, -P.bodyAngleZ / 10 * BODY.maxRoll * (1 - sstep(...BODY.rollBand, restY)));
   }
@@ -218,14 +276,19 @@ export function createRig(rig) {
       p[1] += (x - rig.face.brow.cx) * Math.sin(a);
     }
     p[1] += P.mouthOpen * 3.5 * w.jaw;
+    if (PUFF && P.cheekPuff > 0 && w.puff) {
+      const puff = Math.min(1, P.cheekPuff) * PUFF.displacement;
+      p[0] += (w.puff[1] - w.puff[0]) * puff;
+      p[1] += (w.puff[0] + w.puff[1]) * puff * 0.2;
+    }
     // head turn, per part: nose and mouth travel further than the eyes, the far eye
     // narrows and the near eye widens, the ears and buns slide the other way
-    const ax = P.angleX / 30, ay = P.angleY / 30;
+    const ax = P.angleX / 30, ay = headWarp ? 0 : P.angleY / 30 * (1 - facePreservation(x, y, P));
     p[0] += ax * (8 * w.nose + 5 * w.mouth) + (x - rig.face.eyeA.cx) * 0.12 * ax * w.eyeA - (x - rig.face.eyeB.cx) * 0.12 * ax * w.eyeB
       - ax * 9 * w.earR + ax * 4 * w.earL - ax * 10 * (w.bunL + w.bunR);
     p[1] -= ay * (6 * w.nose + 3 * w.mouth);
     p[1] += (y - rig.face.eyeA.cy) * -0.06 * Math.abs(ay) * w.eyeA + (y - rig.face.eyeB.cy) * -0.06 * Math.abs(ay) * w.eyeB;
-    applyHead(p, w.head, P, w.turn);
+    applyHead(p, w.head, P, w.turn, w.morphs);
     applyBody(p, y, P, w.chest, w.breath, w.shoulder);
     return p;
   }
@@ -295,5 +358,6 @@ export function createRig(rig) {
     const w = baseWeights(t.pivot[0], t.pivot[1]);
     return deformBase(t.pivot[0], t.pivot[1], w, P, phys, out);
   }
-  return { IMG, EYES, MOUTH, CHEEKS, STRANDS, TASSELS, headWeight, turnWeight, baseWeights, deformBase, applyHead, applyBody, handWeights, handFrame, deformHand, eyePartY, eyePartAlpha, tasselAnchor };
+  return { IMG, EYES, MOUTH, CHEEKS, STRANDS, TASSELS, headWeight, turnWeight, baseWeights, deformBase, applyHead, applyBody, handWeights, handFrame, deformHand, eyePartY, eyePartAlpha, tasselAnchor,
+    setHeadWarp(value) { headWarp = value; }, setHeadMorphSources(value) { morphSources = value; } };
 }

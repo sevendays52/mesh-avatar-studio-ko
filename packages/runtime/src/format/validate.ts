@@ -1,6 +1,7 @@
 import { validateRig } from '../rig/validate.ts';
 import type { Rig } from '../rig/types';
 import { parseManifest } from './manifest.ts';
+import { pitchViewPackages } from '../engine/pitch-views.js';
 
 type FileData = Uint8Array | { size: number };
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -108,6 +109,13 @@ export function validateAvatarFiles(files: Record<string, FileData>): string[] {
   if (sprites && version(sprites, 'built/sprites/sprites.json')) {
     build(sprites, 'built/sprites/sprites.json');
     layers(sprites.layers, 'built/sprites/sprites.json', 'built/sprites', rig ? [rig.image.width, rig.image.height] : undefined);
+  }
+  if (rig?.head.pitch?.views?.length) {
+    if (!sprites) errors.push('built/sprites/sprites.json: drawn pitch views require sprite metadata');
+    else {
+      try { pitchViewPackages(rig, sprites, () => ''); }
+      catch (error) { errors.push(`built/sprites/sprites.json: ${(error as Error).message}`); }
+    }
   }
   return errors;
 }

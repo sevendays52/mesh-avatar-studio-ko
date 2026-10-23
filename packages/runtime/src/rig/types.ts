@@ -47,10 +47,14 @@ export interface Rig {
   head: Ellipse & {
     shiftX: number; shiftY: number; pivotX: number; pivotY: number;
     maxRoll: number; weightBand: Band; turnBand: Band;
+    /** Optional neck-centred pitch projection; angles in radians, depth in source pixels. */
+    pitch?: { maxAngle: number; depth: number; facePreservation?: number; views?: { id: string; angleY: number }[] };
   };
   body: {
     pivotX: number; pivotY: number; maxRoll: number;
     breathBand: Band; rollBand: Band; chest: Ellipse; shoulders: Ellipse[];
+    /** Optional secondary torso travel in source pixels. */
+    motion?: { turn: number; nod: number; shoulder: number };
   };
   face: Record<'nose' | 'mouth' | 'eyeA' | 'eyeB' | 'earL' | 'earR', Ellipse> & {
     brow: Ellipse & { band: Band };
@@ -63,6 +67,8 @@ export interface Rig {
     area: Ellipse & { angle: number };
   };
   cheeks: Point[];
+  /** Independent of blush: compact regions ordered image-left, image-right. */
+  cheekPuff?: { regions: [Ellipse, Ellipse]; displacement: number };
   strands?: Strand[];
   accessories?: Accessory[];
   hand?: Hand;

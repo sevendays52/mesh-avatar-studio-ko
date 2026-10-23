@@ -91,7 +91,7 @@ export function createSpriteModule(engine, rig) {
     const shut = n => n.startsWith('eyes_closed') || n.startsWith('eyes_smile');
     const moodMouth = n => MOUTH_MOODS.some(m => n === `mouth_${m}`);
     const order = n => (shut(n) ? 1 : n.startsWith('eyes_') ? 0 : moodMouth(n) ? 2 : 3);
-    const entries = Object.entries(sheet.layers).sort((x, y) => order(x[0]) - order(y[0]));
+    const entries = Object.entries(sheet.layers).filter(([name]) => !name.startsWith('pitch_view_')).sort((x, y) => order(x[0]) - order(y[0]));
     for (const [name, rect] of entries) {
       const mesh = buildGrid(rect, rig.mesh.spriteCell, alphaOf(imgs[name]), imgs[name].width);
       const W = [], inner = [];

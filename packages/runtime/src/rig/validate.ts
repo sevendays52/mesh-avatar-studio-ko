@@ -45,13 +45,31 @@ const unit: Check = (v, p, e) => {
   number(v, p, e);
   if (typeof v === 'number' && (v < 0 || v > 1)) e.push(`${p}: must be between 0 and 1`);
 };
+const pitchAngle: Check = (v, p, e) => {
+  number(v, p, e);
+  if (typeof v === 'number' && (v < 0 || v > Math.PI / 3)) e.push(`${p}: must be between 0 and PI/3 radians`);
+};
+const nonnegative: Check = (v, p, e) => {
+  number(v, p, e);
+  if (typeof v === 'number' && v < 0) e.push(`${p}: must not be negative`);
+};
+const viewAngle: Check = (v, p, e) => {
+  number(v, p, e);
+  if (typeof v === 'number' && (v < -30 || v > 30 || v === 0)) e.push(`${p}: must be a nonzero angle between -30 and 30 degrees`);
+};
+const viewId: Check = (v, p, e) => {
+  if (typeof v !== 'string' || !/^[A-Za-z0-9_-]+$/.test(v)) e.push(`${p}: expected a layer identifier`);
+};
 const schema = (draft: boolean) => object({
   version: (v, p, e) => { if (v !== 1) e.push(`${p}: only version 1 is supported`); },
   image: object({ width: integer, height: integer }),
   head: object({ ...ellipseFields, shiftX: number, shiftY: number, pivotX: number,
-    pivotY: number, maxRoll: number, weightBand: band, turnBand: band }),
+    pivotY: number, maxRoll: number, weightBand: band, turnBand: band,
+    pitch: object({ maxAngle: pitchAngle, depth: nonnegative, facePreservation: unit,
+      views: array(object({ id: viewId, angleY: viewAngle }), 1, 4) }, ['facePreservation', 'views']) }, ['pitch']),
   body: object({ pivotX: number, pivotY: number, maxRoll: number, breathBand: band,
-    rollBand: band, chest: ellipse, shoulders: array(ellipse) }),
+    rollBand: band, chest: ellipse, shoulders: array(ellipse),
+    motion: object({ turn: nonnegative, nod: nonnegative, shoulder: nonnegative }) }, ['motion']),
   face: object({ nose: ellipse, mouth: ellipse, eyeA: ellipse, eyeB: ellipse,
     earL: ellipse, earR: ellipse, brow: object({ ...ellipseFields, band }),
     jaw: object({ ...ellipseFields, band }) }),
@@ -61,6 +79,7 @@ const schema = (draft: boolean) => object({
   mouth: object({ cx: number, cy: number, angle: number, halfLen: positive, bow: number,
     area: object({ ...ellipseFields, angle: number }) }),
   cheeks: array(point, 2, 2),
+  cheekPuff: object({ regions: array(ellipse, 2, 2), displacement: nonnegative }),
   strands: array(object({ name: string, nodes: line, sigma: positive, k: positive, max: positive })),
   accessories: array(object({ name: string, pivot: point, tip: point, split: unit,
     box: array(wholeNumber, 4, 4), color: object({ redness: unit, minRed: number }) })),
@@ -72,13 +91,20 @@ const schema = (draft: boolean) => object({
     y0: wholeNumber, y1: wholeNumber, cell: integer }), handCell: integer,
     tasselCell: integer, eyeBallCell: integer, eyeCell: integer, spriteCell: integer }),
   view: object({ padTop: number, padSide: number, gazeCenter: point }, ['gazeCenter']),
-}, ['buns', 'strands', 'accessories', 'hand']);
+}, ['buns', 'strands', 'accessories', 'hand', 'cheekPuff']);
 
 export function validateRig(value: unknown, options: { draft?: boolean } = {}): string[] {
   const errors: string[] = [];
   schema(options.draft ?? false)(value, 'rig', errors);
   if (errors.length) return errors;
   const rig = value as Rig;
+  if (rig.cheekPuff && rig.cheekPuff.regions[0].cx >= rig.cheekPuff.regions[1].cx)
+    errors.push('rig.cheekPuff.regions: order image-left before image-right');
+  if (rig.cheekPuff && rig.cheekPuff.regions.some(area => rig.cheekPuff!.displacement > Math.min(area.rx, area.ry) / 2))
+    errors.push('rig.cheekPuff.displacement: must not exceed half the smallest region radius');
+  const views = rig.head.pitch?.views ?? [];
+  if (new Set(views.map(v => v.id)).size !== views.length || new Set(views.map(v => v.angleY)).size !== views.length)
+    errors.push('rig.head.pitch.views: identifiers and angles must be unique');
   rig.eyes.forEach((eye, i) => {
     const curves = ['x0', 'x1', 'top', 'bot'] as const;
     if (options.draft && curves.every(key => eye[key] === undefined)) return;

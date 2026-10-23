@@ -250,6 +250,7 @@ export function createRenderer(engine, rig) {
     // padTop pushes the top of the image above the canvas (hides a cut-off top edge).
     constructor(canvas, { padTop = 0, padSide = 0, fit = 'contain' } = {}) {
       this.pad = { top: padTop, side: padSide };
+      this.viewport = { zoom: 1, x: 0, y: 0 };
       this.fit = fit;
       const gl = canvas.getContext('webgl2', { premultipliedAlpha: true, antialias: true, alpha: true, preserveDrawingBuffer: true });
       if (!gl) throw new Error('WebGL2 is not available');
@@ -354,8 +355,14 @@ export function createRenderer(engine, rig) {
       const w = Math.round(c.clientWidth * dpr), h = Math.round(c.clientHeight * dpr);
       if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
       // Contain anchors the cut-off body to the bottom; cover crops around the image center.
-      const s = (this.fit === 'cover' ? Math.max : Math.min)(w / (IMG.w * (1 + 2 * this.pad.side)), h / (IMG.h * (1 + this.pad.top)));
-      const ox = (w - IMG.w * s) / 2, oy = (h - IMG.h * s) / (this.fit === 'cover' ? 2 : 1);
+      let s = (this.fit === 'cover' ? Math.max : Math.min)(w / (IMG.w * (1 + 2 * this.pad.side)), h / (IMG.h * (1 + this.pad.top)));
+      let ox = (w - IMG.w * s) / 2, oy = (h - IMG.h * s) / (this.fit === 'cover' ? 2 : 1);
+      const { zoom, x, y } = this.viewport;
+      if (zoom !== 1 || x !== 0 || y !== 0) {
+        ox = w / 2 + (ox - w / 2) * zoom + x * w;
+        oy = h / 2 + (oy - h / 2) * zoom + y * h;
+        s *= zoom;
+      }
       this.scale = [2 * s / w, -2 * s / h];
       this.offset = [-1 + 2 * ox / w, 1 - 2 * oy / h];
       this.pxScale = s; this.pxOff = [ox, oy];

@@ -7,6 +7,7 @@
 import argparse
 import hashlib
 import json
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -235,11 +236,34 @@ def build(project, output=None, tolerance=8):
         stage = Path(temporary)
         for name, crop in images.items():
             Image.fromarray(crop).save(stage / f"{name}.png")
+        pitch_views = None
+        pitch_morphs = None
+        previous = output / "sprites.json"
+        if previous.exists():
+            old = json.loads(previous.read_text(encoding="utf-8"))
+            if isinstance(old.get("pitchViews"), dict):
+                pitch_views = old["pitchViews"]
+                pitch_morphs = old.get("pitchMorphs")
+                for name, rect in old.get("layers", {}).items():
+                    if not name.startswith("pitch_view_"):
+                        continue
+                    if not re.fullmatch(r"pitch_view_[A-Za-z0-9_-]+", name):
+                        raise ValueError("invalid pitch view layer name")
+                    asset = inside_repo(output / f"{name}.png")
+                    if asset.parent != output.resolve():
+                        raise ValueError("pitch view image must stay in sprites directory")
+                    (stage / f"{name}.png").write_bytes(asset.read_bytes())
+                    meta[name] = rect
         build_id = hashlib.sha1(
             b"".join((stage / f"{name}.png").read_bytes() for name in sorted(meta))
         ).hexdigest()[:10]
+        manifest = {"build": build_id, "layers": meta, "version": 1}
+        if pitch_views is not None:
+            manifest["pitchViews"] = pitch_views
+        if pitch_morphs is not None:
+            manifest["pitchMorphs"] = pitch_morphs
         (stage / "sprites.json").write_text(
-            json.dumps({"build": build_id, "layers": meta, "version": 1}, indent=2) + "\n",
+            json.dumps(manifest, indent=2) + "\n",
             encoding="utf-8",
         )
         output.mkdir(exist_ok=True)

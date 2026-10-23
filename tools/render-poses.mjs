@@ -11,6 +11,13 @@ const poses = [
   ['eyes-closed', { eyeLOpen: 0, eyeROpen: 0 }], ['mouth-open', { mouthOpen: 1 }],
   ['turn-left', { angleX: -30 }], ['turn-right', { angleX: 30 }],
   ['look-up', { angleY: 15 }], ['look-down', { angleY: -15 }],
+  ['look-up-full', { angleY: 30 }], ['look-down-full', { angleY: -30 }],
+  ['nod-turn', { angleX: 30, angleY: -30, angleZ: 15 }],
+  ['nod-entry', { angleY: -7.5 }], ['nod-between', { angleY: -22.5 }],
+  ['nod-closed', { angleY: -30, eyeLOpen: 0, eyeROpen: 0 }], ['nod-speaking', { angleY: -30, mouthOpen: 0.9 }],
+  ['cheeks-puffed', { cheekPuff: 1 }], ['nod-puffed', { angleY: -30, cheekPuff: 1 }],
+  ['body-nod', { angleY: -30, bodyAngleY: -6 }],
+  ['body-follow', { angleX: 30, bodyAngleX: 6, angleZ: 15, bodyAngleZ: 3 }],
   ['tilt-left', { angleZ: -15 }], ['tilt-right', { angleZ: 15 }],
   ['body-left', { bodyAngleZ: -8 }], ['body-right', { bodyAngleZ: 8 }],
   // live expressions; they show the drawn expression eyes when the avatar has them
