@@ -47,9 +47,11 @@ test('rebuild runs the real local tool, reloads changed pixels and keeps selecti
   await expect.poll(async () => Number(await editor.getAttribute('data-scale'))).toBeCloseTo(initialScale * Math.exp(0.2));
   const zoomText = await page.getByTestId('zoom-value').textContent();
   const before = await pixels(page), base = await readFile(join(directory, 'built/base.png'));
+  const revision = Number(await page.getByTestId('preview').getAttribute('data-revision'));
   const beforeSize = await page.getByTestId('preview').evaluate(canvas => [(canvas as HTMLCanvasElement).width, (canvas as HTMLCanvasElement).height]);
   const button = page.getByRole('button', { name: 'Save and rebuild layers', exact: true });
   await button.click(); await expect(page.getByTestId('stale-banner')).toHaveCount(0, { timeout: 60000 });
+  await expect.poll(async () => Number(await page.getByTestId('preview').getAttribute('data-revision'))).toBeGreaterThan(revision);
   await expect(page.getByTestId('preview-status')).toHaveAttribute('data-state', 'ready');
   expect(await page.getByTestId('preview').evaluate(canvas => [(canvas as HTMLCanvasElement).width, (canvas as HTMLCanvasElement).height])).toEqual(beforeSize);
   expect(await pixels(page)).not.toBe(before); expect(await readFile(join(directory, 'built/base.png'))).not.toEqual(base);

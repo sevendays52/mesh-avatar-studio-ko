@@ -69,11 +69,13 @@ test('loads a File and restores the unchanged src when source is removed', async
 
 test('delivers load, error and motion once to the latest callbacks', async ({ page }) => {
   await open(page);
-  await page.evaluate(async src => {
-    window.harness.update({ src, paused: true });
-    await new Promise(requestAnimationFrame);
+  await page.evaluate(src => window.harness.update({ src, paused: true, label: 'Updated callback target' }), sample);
+  // A render request need not commit before the next animation frame. Wait for
+  // the same layout effect that applies props, after refreshing the callbacks.
+  await expect(page.locator('mesh-avatar')).toHaveAttribute('label', 'Updated callback target');
+  await page.evaluate(() => {
     window.harness.ref.current!.dispatchEvent(new CustomEvent('motion', { detail: { id: 'wave' } }));
-  }, sample);
+  });
   expect(await page.evaluate(() => window.harness.log.filter(x => x.event === 'motion'))).toEqual([{ version: 1, event: 'motion', value: 'wave' }]);
   await page.evaluate(src => window.harness.update({ src, source: new Blob(['broken']) }), sample);
   await expect.poll(() => page.evaluate(() => window.harness.log.filter(x => x.event === 'error'))).toEqual([{ version: 2, event: 'error', value: expect.any(String) }]);

@@ -6,7 +6,12 @@ test('pose controls select wide, neutral and round mouths and show held vowel sh
   test.skip(!samplePresent, sampleSkipReason);
   await page.goto('/'); await dismissGuide(page);
   await expect(page.getByTestId('preview-status')).toHaveAttribute('data-state', 'ready');
+  const preview = page.getByTestId('preview');
+  const revision = await preview.getAttribute('data-revision');
   await page.getByTestId('idle-toggle').click();
+  // Pausing recreates the avatar after a debounce; don't capture the old idle canvas.
+  await expect(preview).not.toHaveAttribute('data-revision', revision!);
+  await expect(page.getByTestId('preview-status')).toHaveAttribute('data-state', 'ready');
   const open = page.getByRole('slider', { name: 'Mouth open', exact: true });
   const form = page.getByRole('slider', { name: 'Mouth shape', exact: true });
   const picture = async () => createHash('sha256').update(await page.getByTestId('preview').screenshot()).digest('hex');
