@@ -21,6 +21,16 @@ tool paths and the login shell environment, then uses the same local server as W
 For preparation, install Python with `uv python install 3.12` and run
 `node tools/doctor.mjs --lang ko`. Windows keeps its `.exe` launcher; Linux uses `npm start`.
 
+### Working on another machine
+
+Use the same code revision and install dependencies locally with `npm ci`; follow the
+tool setup above. Copy the complete `projects/<name>/` folder into the new checkout:
+source, rigs, layers, variants, custom masks and any project-specific build/review files.
+Projects are excluded from Git, and a playback archive may omit authoring sources.
+Keep existing rigs and accepted drawings instead of reinitializing the project. For a
+built avatar, run `npm run validate-avatar -- projects/<name>` before editing. Follow the
+coordinate calibration and visual review below on the new setup as well.
+
 ### Model
 Reading pixel coordinates from images needs strong vision. Use an image-capable coding
 agent and report its model when known. Run the vision check below to establish whether it

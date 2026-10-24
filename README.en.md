@@ -28,6 +28,8 @@ Korean localization covers local Studio and Live. Detailed technical documentati
 
 ## Install and run
 
+To continue authoring on another computer, follow the [agent guide](docs/agent-guide.md#working-on-another-machine) to match the code revision, install dependencies and transfer the complete project folder. `projects/` is excluded from Git.
+
 ### Windows launcher
 
 After cloning, open Codex in the repository and ask **“Prepare this project to run.”**

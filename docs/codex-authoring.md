@@ -7,6 +7,9 @@
 사용자가 그림마다 프롬프트를 작성하거나 JSON을 수동으로 연결할 필요가 없습니다.
 Studio는 요청을 전달하고 결과를 재생합니다. Studio 자체가 생성 API를 호출하지는 않습니다.
 
+다른 컴퓨터에서 기존 프로젝트를 이어갈 때는 [환경·프로젝트 이전 안내](agent-guide.md#working-on-another-machine)를
+확인하고 원화별 리그와 보정 마스크를 보존합니다.
+
 Follow `agent-guide.md` in order. The default drawing set is seven neutral eye/mouth
 edits plus four head directions. Each head direction needs its own seven eye/mouth
 edits: normally **39 full-size edited PNGs**, before retries. Sad/surprised expression
