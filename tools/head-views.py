@@ -89,6 +89,11 @@ def prepare(project):
             f"Edit source.png as a full-size {image.width} x {image.height} RGBA PNG. "
             f"Redraw the same character's head {direction} at yaw {x}, pitch {y} degrees. "
             "Create actual new drawn perspective and contours, not a stretched/rotated frontal image. "
+            "Show coherent foreshortening: the far eye/cheek is narrower than the near side; "
+            "nose, mouth, ears and silhouette must describe the SAME head orientation. "
+            "For pitch, change the visible crown/under-chin plane and eye-to-nose-to-mouth spacing, "
+            "not just the face position or eyelid openness. A downward view must still have neutral OPEN eyes. "
+            "Use the requested degrees as an authoring target, not a measurement recovered from the image. "
             "Keep identity, hair parting, accessories, ink weight, colours, neutral open eyes, closed mouth, scale and neck attachment. "
             "Transparent mask pixels may change, including the head silhouette and its alpha; opaque pixels are protected. "
             "Preserve ALL pixels below the mask, including body, clothing, long hair and alpha. "
@@ -96,20 +101,28 @@ def prepare(project):
             "Do not mirror the image, move the whole figure, flatten transparency, add a background or crop it.\n", encoding="utf-8")
         entries.append(dict(id=name, angleX=x, angleY=y))
     save_json(dict(version=1, sourceHash=source_hash(project), editRect=[x0, 0, x1, lock_y], views=entries), plan_path)
+    if any(cy + rig["head"]["ry"] * .12 >= lock_y for _, cy in rig["cheeks"]) or rig["mouth"]["area"]["cy"] + rig["mouth"]["area"]["ry"] >= lock_y:
+        print("WARNING: the protected boundary crosses a cheek or mouth region. Review a custom mask/overlay before generation; a rectangular neck cut may not fit this character.")
     print("Prepared four head-view requests locally. Obtain image-transfer consent before imagegen.")
 
 
-def accept(project, name, drawing):
+def accept(project, name, drawing, revision=None, mask_override=None, normalize_size=False):
     plan = plan_for(project)
     if name not in {v["id"] for v in plan["views"]}:
         raise ValueError("unknown view identifier")
     drawing = scoped(project, drawing)
     source = project_image(project)
     with Image.open(drawing) as opened:
-        if opened.format != "PNG" or opened.size != source.size or "A" not in opened.getbands():
+        if opened.format != "PNG" or "A" not in opened.getbands():
             raise ValueError("return an unshifted full-size RGBA PNG with transparent background")
-        result = np.array(opened.convert("RGBA"))
-    mask_path = scoped(project, project / "head-views/requests" / name / "mask.png")
+        normalized = opened.convert("RGBA")
+        if opened.size != source.size:
+            if not normalize_size or abs(opened.width / opened.height - source.width / source.height) > .001:
+                raise ValueError("return matching dimensions, or explicitly use --normalize-size for a same-aspect generated image")
+            print(f"{name}: normalizing generated {opened.width} x {opened.height} to {source.width} x {source.height}; all alignment/protection checks still apply")
+            normalized = normalized.resize(source.size, Image.Resampling.LANCZOS)
+        result = np.array(normalized)
+    mask_path = scoped(project, project / mask_override) if mask_override else scoped(project, project / "head-views/requests" / name / "mask.png")
     with Image.open(mask_path) as mask:
         if mask.size != source.size:
             raise ValueError("head mask size must match source.png")
@@ -148,6 +161,10 @@ def accept(project, name, drawing):
         raise ValueError("drawing spills across the protected neck edge; regenerate preserving the neck attachment")
     result[~editable] = original[~editable]
     folder = scoped(project, project / "head-views" / name)
+    if revision is not None:
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", revision):
+            raise ValueError("use a safe revision identifier")
+        folder = scoped(project, folder / "revisions" / revision)
     if any((folder / file).exists() for file in ("source.png", "rig.json", "rig.draft.json", "built", "variants")):
         raise ValueError("view already exists; review it in place instead of replacing its source/rig")
     folder.mkdir(parents=True, exist_ok=True)
@@ -251,6 +268,9 @@ def main():
     parser.add_argument("project", type=Path)
     parser.add_argument("id", nargs="?")
     parser.add_argument("drawing", nargs="?", type=Path)
+    parser.add_argument("--revision", help="accept into head-views/<id>/revisions/<name> without replacing the accepted view")
+    parser.add_argument("--mask", help="reviewed project-relative alpha mask for this revision")
+    parser.add_argument("--normalize-size", action="store_true", help="explicitly resize same-aspect generated PNGs before the unchanged protection checks")
     args = parser.parse_args()
     try:
         project = inside_repo(args.project)
@@ -262,7 +282,7 @@ def main():
         elif args.command == "accept":
             if not args.id or not args.drawing:
                 raise ValueError("accept requires a view identifier and project-local drawing path")
-            accept(project, args.id, args.drawing)
+            accept(project, args.id, args.drawing, args.revision, args.mask, args.normalize_size)
         else:
             pack(project)
         return 0

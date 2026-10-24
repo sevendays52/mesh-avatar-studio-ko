@@ -94,6 +94,16 @@ at most 12% over 48/255). It rejects body displacement over 3 px and new opaque
 background coverage over 1%. These checks do not establish visual seam quality:
 inspect the accepted drawing at the mask boundary too.
 It refuses to replace an already accepted view. Existing neutral metadata is preserved.
+
+For a reviewed replacement, use `--revision <safe-id>` to accept into
+`head-views/<id>/revisions/<safe-id>/` while keeping the accepted drawing intact.
+If the generated PNG has a larger resolution, `--normalize-size` explicitly permits
+same-aspect resampling to source dimensions **before** all existing body, alpha,
+alignment and boundary checks. It does not relax those checks. `--mask <path>` selects
+a reviewed project-relative mask. Inspect a zoomed overlay first: a rectangular
+boundary through cheeks on a round character can create a seam. Protect hands and
+other fixed body parts individually. After retracing, building and visual review,
+preserve the previous accepted workspace before promoting and repacking a revision.
 Rejections require a corrected edit, not bypassing the check.
 
 ## 3. Rig and animate EVERY head drawing
@@ -149,6 +159,13 @@ poses to the plan (up to eight non-neutral poses), with their own masks, rigs an
 then repack. Do not use persistent angle-based crossfades that leave double contours as
 a substitute for aligned drawings. Stop after three repair rounds and report remaining
 seams, silhouette changes, shading jumps, thin lashes or other defects honestly.
+
+For perspective review, keep neutral eyes open in all head drawings. Inspect near/far
+eye widths, the crown and chin silhouette, and consistent nose/eye/mouth spacing.
+An upward gaze or a squint alone does not establish a head angle. Follow
+[perspective.md](perspective.md) before adding optional mesh perspective.
+`render-poses -- <project> --rig <project-relative-rig> --out review/<name>` can compare
+a candidate without replacing the accepted rig; both paths must stay inside the project.
 
 Open the SAME root project in Studio and confirm Engine ready. Report what was actually
 generated/installed, what remains pending, reviewed poses, and where to rebuild. Do not

@@ -78,6 +78,32 @@ class HeadViewsTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "safe unique"):
             views.plan_for(self.project)
 
+    def test_revision_is_non_destructive_and_normalization_remains_explicit_and_protected(self):
+        views.prepare(self.project)
+        drawing = self.project / "drawing.png"
+        Image.open(self.project / "source.png").save(drawing)
+        views.accept(self.project, "up", drawing)
+        accepted = self.project / "head-views/up/source.png"
+        before = accepted.read_bytes()
+        Image.open(drawing).resize((self.size[0] * 2, self.size[1] * 2)).save(drawing)
+        with self.assertRaisesRegex(ValueError, "matching dimensions"):
+            views.accept(self.project, "up", drawing, revision="v2")
+        views.accept(self.project, "up", drawing, revision="v2", normalize_size=True)
+        with Image.open(self.project / "head-views/up/revisions/v2/source.png") as revised:
+            self.assertEqual(revised.size, self.size)
+        self.assertEqual(accepted.read_bytes(), before)
+        with self.assertRaisesRegex(ValueError, "safe revision"):
+            views.accept(self.project, "up", drawing, revision="../escape", normalize_size=True)
+        with self.assertRaisesRegex(ValueError, "inside this project"):
+            views.accept(self.project, "up", drawing, revision="v3", mask_override="../../AGENTS.md", normalize_size=True)
+        Image.new("RGBA", (4, 4), "white").save(self.project / "mask.png")
+        with self.assertRaisesRegex(ValueError, "mask size"):
+            views.accept(self.project, "up", drawing, revision="v3", mask_override="mask.png", normalize_size=True)
+        Image.new("RGBA", (self.size[0] * 2, self.size[1] * 2), "black").save(drawing)
+        with self.assertRaisesRegex(ValueError, "protected body"):
+            views.accept(self.project, "up", drawing, revision="v3", normalize_size=True)
+        self.assertFalse((self.project / "head-views/up/revisions/v3/source.png").exists())
+
     def test_codec_noise_restores_body_but_neck_repaint_is_rejected(self):
         views.prepare(self.project)
         drawing = self.project / "encoded.png"

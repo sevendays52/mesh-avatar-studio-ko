@@ -1,11 +1,12 @@
 import { readFile, writeFile, mkdir, realpath } from 'node:fs/promises';
-import { resolve, relative, dirname, basename } from 'node:path';
+import { resolve, relative, dirname, basename, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { chromium } from '@playwright/test';
 import { validateRig } from '../packages/runtime/src/rig/validate.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const outside = (parent, path) => { const rel = relative(parent, path); return rel === '..' || rel.startsWith('../') || rel.startsWith('..\\') || isAbsolute(rel); };
 const poses = [
   ['rest', {}], ['eyes-half', { eyeLOpen: 0.5, eyeROpen: 0.5 }],
   ['eyes-closed', { eyeLOpen: 0, eyeROpen: 0 }], ['mouth-open', { mouthOpen: 1 }],
@@ -28,16 +29,25 @@ async function main() {
   const args = process.argv.slice(2);
   const blinkOnly = args.includes('--blink-only');
   const headAxisOnly = args.includes('--head-axis-only');
-  const positional = args.filter(arg => !['--blink-only', '--head-axis-only'].includes(arg));
-  const usage = 'Usage: npm run render-poses -- <project> [--blink-only | --head-axis-only]';
+  const values = {};
+  const positional = [];
+  for (let i = 0; i < args.length; i++) {
+    if (['--rig', '--out'].includes(args[i])) {
+      if (!args[i + 1] || args[i + 1].startsWith('--')) throw new Error(`${args[i]} requires a project-relative path`);
+      values[args[i]] = args[++i];
+    } else if (!['--blink-only', '--head-axis-only'].includes(args[i])) positional.push(args[i]);
+  }
+  const usage = 'Usage: npm run render-poses -- <project> [--blink-only | --head-axis-only] [--rig rig.json] [--out review/path]';
   if (args.includes('--help')) {
     console.log(usage);
     return;
   }
   if (positional.length !== 1 || (blinkOnly && headAxisOnly)) throw new Error(usage);
   const project = await realpath(resolve(positional[0]));
-  if (relative(root, project).startsWith('..')) throw new Error('project must stay inside the repository');
-  const rig = JSON.parse(await readFile(resolve(project, 'rig.json'), 'utf8'));
+  if (outside(root, project)) throw new Error('project must stay inside the repository');
+  const rigPath = await realpath(resolve(project, values['--rig'] ?? 'rig.json'));
+  if (outside(project, rigPath)) throw new Error('rig must stay inside the project');
+  const rig = JSON.parse(await readFile(rigPath, 'utf8'));
   const errors = validateRig(rig);
   if (errors.length) throw new Error(errors.join('\n'));
   if (rig.head.views?.length) {
@@ -59,11 +69,11 @@ async function main() {
     for (const y of [-30, 30]) poses.push([`axis-x0-y${y}`, { angleX: 0, angleY: y }]);
   }
   const built = await realpath(resolve(project, 'built'));
-  if (relative(project, built).startsWith('..')) throw new Error('built folder must stay inside the project');
+  if (outside(project, built)) throw new Error('built folder must stay inside the project');
   const assets = {};
   async function asset(name) {
     const path = await realpath(resolve(built, name));
-    if (relative(built, path).startsWith('..')) throw new Error(`asset escapes built folder: ${name}`);
+    if (outside(built, path)) throw new Error(`asset escapes built folder: ${name}`);
     assets[name] = `data:${name.endsWith('.png') ? 'image/png' : 'application/json'};base64,${(await readFile(path)).toString('base64')}`;
   }
   await asset('layers.json');
@@ -181,8 +191,17 @@ async function main() {
       return { images: [...pictures, ...crops, ['contact-sheet', sheet.toDataURL()]], width, height, cropBounds: { eyes, mouth }, padTop: 0.1, padSide: 0.1 };
     }, { rig, assets, poses, blinkOnly, headAxisOnly });
     if (browserErrors.length) throw new Error(browserErrors.join('\n'));
-    const review = resolve(project, blinkOnly ? 'review/blinks' : headAxisOnly ? 'review/head-axes' : 'review'); await mkdir(review, { recursive: true });
-    if (relative(project, await realpath(review)).startsWith('..')) throw new Error('review folder must stay inside the project');
+    const review = resolve(project, values['--out'] ?? (blinkOnly ? 'review/blinks' : headAxisOnly ? 'review/head-axes' : 'review'));
+    if (outside(project, review)) throw new Error('review folder must stay inside the project');
+    // Resolve an existing ancestor before mkdir, so an output through a symlink
+    // cannot create directories outside the private project tree.
+    let ancestor = review;
+    for (;;) {
+      try { if (outside(project, await realpath(ancestor))) throw new Error('review folder must stay inside the project'); break; }
+      catch (error) { if (error.code !== 'ENOENT') throw error; ancestor = dirname(ancestor); }
+    }
+    await mkdir(review, { recursive: true });
+    if (outside(project, await realpath(review))) throw new Error('review folder must stay inside the project');
     for (const [name, url] of result.images) await writeFile(resolve(review, `${name}.png`), Buffer.from(url.split(',')[1], 'base64'));
     const { images, ...metadata } = result;
     const frames = images.filter(([name]) => !name.endsWith('-eyes') && !name.endsWith('-mouth') && name !== 'contact-sheet');
