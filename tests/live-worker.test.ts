@@ -3,6 +3,24 @@ import { runInNewContext } from 'node:vm';
 import { expect, test, vi } from 'vitest';
 
 const source = readFileSync(new URL('../src/live/tracking-worker.js', import.meta.url), 'utf8');
+test.each(['balanced', 'sensitive'])('worker %s profile returns compact full-frame bounds without raw landmarks', async profile => {
+  const raw = { faceLandmarks: [[{ x: .1, y: .2 }, { x: .5, y: .7 }, { x: .3, y: .4 }]], faceBlendshapes: [], facialTransformationMatrixes: [] };
+  const create = vi.fn(async () => ({ detectForVideo: () => raw })), postMessage = vi.fn();
+  const scope = { exports: {}, postMessage, setInterval: vi.fn(), location: { href: 'http://127.0.0.1/mediapipe/tracking-worker.js' },
+    importScripts: () => { scope.exports = { FaceLandmarker: { createFromOptions: create }, FilesetResolver: { forVisionTasks: async () => ({}) } }; },
+    onmessage: async (_event: { data: Record<string, unknown> }) => {},
+  };
+  runInNewContext(source, { self: scope, performance: { now: () => 0 }, URL });
+  await scope.onmessage({ data: { type: 'init', detectionProfile: profile } });
+  const settings = create.mock.calls[0] as unknown as [unknown, Record<string, unknown>];
+  expect(settings[1]).toMatchObject({ minFaceDetectionConfidence: profile === 'sensitive' ? .35 : .5,
+    minFacePresenceConfidence: profile === 'sensitive' ? .35 : .5, minTrackingConfidence: .5, numFaces: 1 });
+  await scope.onmessage({ data: { type: 'frame', frame: { close() {} }, timestamp: 0 } });
+  const message = postMessage.mock.calls.find(([m]) => m.type === 'result')![0];
+  expect(message.result.faceLandmarks).toEqual([[]]);
+  expect(message.result.faceBounds).toMatchObject({ x: .1, y: .2, width: .4 });
+  expect(message.result.faceBounds.height).toBeCloseTo(.5);
+});
 test('worker falls back from GPU to CPU, keeps frames local and closes both accepted and skipped frames', async () => {
   const result = { faceLandmarks: [[{ x: 0.5, y: 0.5 }]], faceBlendshapes: [], facialTransformationMatrixes: [] };
   const detectForVideo = vi.fn(() => result), create = vi.fn().mockRejectedValueOnce(new Error('GPU unavailable')).mockResolvedValue({ detectForVideo });

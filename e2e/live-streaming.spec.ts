@@ -17,8 +17,8 @@ async function guardNetwork(context: BrowserContext) {
   context.pages().forEach(watchSockets); context.on('page', watchSockets);
   return outside;
 }
-async function syntheticMedia(page: Page) {
-  await page.addInitScript(() => {
+async function syntheticMedia(page: Page, wide = false) {
+  await page.addInitScript(wide => {
     Object.defineProperty(navigator.mediaDevices, 'enumerateDevices', { value: async () => [] });
     Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { value: async (constraints: MediaStreamConstraints) => {
       if (constraints.audio) {
@@ -30,7 +30,7 @@ async function syntheticMedia(page: Page) {
         track.stop = () => { oscillator.stop(); void audio.close(); stop(); };
         return target.stream;
       }
-      const canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = 480;
+      const canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = wide ? 360 : 480;
       const ctx = canvas.getContext('2d')!;
       const draw = () => { if ((window as Window & { freezeVideo?: boolean }).freezeVideo) return; ctx.fillStyle = '#999'; ctx.fillRect(0, 0, 640, 480); ctx.fillStyle = '#fff'; ctx.fillRect(Date.now() % 500, 100, 40, 40); };
       draw(); const timer = window.setInterval(draw, 33);
@@ -38,7 +38,7 @@ async function syntheticMedia(page: Page) {
       track.stop = () => { clearInterval(timer); stop(); };
       return stream;
     } });
-  });
+  }, wide);
 }
 async function stubTracker(page: Page, moving = false) {
   await page.context().route('**/mediapipe/vision_bundle.js', route => route.fulfill({ contentType: 'application/javascript', body: `
@@ -95,6 +95,49 @@ test('Live zooms and pans, centres face and upper body, persists framing and rel
   await page.getByRole('button', { name: 'Reset view', exact: true }).click();
   await expect(zoom).toHaveValue('1'); await expect(x).toHaveValue('0'); await expect(y).toHaveValue('0');
   expect(outside).toEqual([]);
+});
+
+test('camera shows uncropped bounds, mirrors the region, guides loss and reacquisition, and scales weak expressions', async ({ context, page }) => {
+  const outside = await guardNetwork(context); await syntheticMedia(page, true);
+  await context.route('**/mediapipe/vision_bundle.js', route => route.fulfill({ contentType: 'application/javascript', body: `
+    let mode = 'good'; const channel = new BroadcastChannel('test-face-region'); channel.onmessage = e => { mode = e.data; };
+    self.exports.FilesetResolver = { forVisionTasks: async () => ({}) };
+    self.exports.FaceLandmarker = { createFromOptions: async () => ({ detectForVideo() {
+      const x = mode === 'edge' ? -.1 : .1, size = mode === 'small' ? .05 : .4;
+      return { faceLandmarks: mode === 'lost' ? [] : [[{x,y:.2},{x:x+size,y:.7},{x:x+size/2,y:.4}]],
+        facialTransformationMatrixes: [{data:[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]}],
+        faceBlendshapes: [{categories:[{categoryName:'eyeBlinkLeft',score:.3},{categoryName:'eyeBlinkRight',score:.3},{categoryName:'browInnerUp',score:.2}]}] };
+    } }) };` }));
+  await ready(page, '/live.html?idle=0');
+  await page.getByRole('combobox', { name: 'Face detection', exact: true }).selectOption('sensitive');
+  await page.getByRole('checkbox', { name: 'Capture more detail', exact: true }).check();
+  await page.getByRole('button', { name: 'Start camera', exact: true }).click();
+  const region = page.getByTestId('face-region'), hint = page.getByTestId('face-coverage');
+  await expect(hint).toHaveAttribute('data-state', 'good');
+  await expect(region.locator('rect')).toHaveAttribute('x', '0.5');
+  expect(await page.locator('.camera-preview').evaluate(video => getComputedStyle(video).objectFit)).toBe('contain');
+  await expect.poll(() => page.locator('.camera-monitor').evaluate(el => Number(getComputedStyle(el).aspectRatio.split(' / ')[0]))).toBeCloseTo(16 / 9);
+  await page.getByRole('checkbox', { name: 'Mirror', exact: true }).uncheck();
+  await expect(region.locator('rect')).toHaveAttribute('x', '0.1');
+  const next = (key: string) => page.evaluate(async key => {
+    const path = '/src/live/relay.ts'; const { receiveLiveParameters } = await import(path);
+    return new Promise<number>(resolve => { const off = receiveLiveParameters((data: {params: Record<string, number>}) => { off(); resolve(data.params[key]); }); });
+  }, key);
+  await page.getByRole('slider', { name: 'Eye closure sensitivity', exact: true }).fill('2');
+  await page.getByRole('slider', { name: 'Eyebrow sensitivity', exact: true }).fill('2');
+  await expect.poll(() => next('eyeLOpen')).toBeLessThan(.45);
+  await expect.poll(() => next('browY')).toBeGreaterThan(.38);
+  const send = (mode: string) => page.evaluate(mode => { const channel = new BroadcastChannel('test-face-region'); channel.postMessage(mode); channel.close(); }, mode);
+  for (const mode of ['edge', 'small', 'lost', 'good']) {
+    await send(mode); await expect(hint).toHaveAttribute('data-state', mode === 'lost' ? 'waiting' : mode);
+    if (mode === 'lost') await expect(region).toHaveCount(0);
+  }
+  await page.evaluate(() => { (window as Window & { freezeVideo?: boolean }).freezeVideo = true; });
+  await expect(hint).toHaveAttribute('data-state', 'waiting'); await expect(region).toHaveCount(0);
+  await page.evaluate(() => { (window as Window & { freezeVideo?: boolean }).freezeVideo = false; });
+  await expect(hint).toHaveAttribute('data-state', 'good');
+  await page.getByRole('button', { name: 'Stop camera', exact: true }).click();
+  await expect(region).toHaveCount(0); await expect(hint).toHaveCount(0); expect(outside).toEqual([]);
 });
 
 test('camera head nod changes the rendered avatar, calibrates and reverses independently of mirror', async ({ context, page }) => {
@@ -193,7 +236,8 @@ test('live controls calibrate, mirror, compose mic mouth, localize and relay wit
   await expect(page.getByText('Neutral pose saved', { exact: true })).toBeVisible();
   await expect.poll(async () => Math.abs((await nextParams()).angleX)).toBeLessThan(0.5);
   await page.getByRole('checkbox', { name: 'Show camera preview' }).uncheck();
-  await expect(page.locator('video')).toHaveClass(/camera-hidden/);
+  await expect(page.locator('.camera-monitor')).toHaveClass(/camera-hidden/);
+  await expect(page.locator('video')).toHaveCSS('object-fit', 'contain');
   await expect(page.getByTestId('background-hint')).toContainText('Browser Source');
   await expect(page.getByTestId('background-hint')).toContainText('Window Capture does not keep transparency');
   await page.getByLabel('Background', { exact: true }).selectOption('#00ff00');

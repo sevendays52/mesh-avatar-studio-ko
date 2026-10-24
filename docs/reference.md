@@ -240,6 +240,22 @@ trigger external requests. If `project` is present, `avatar` is ignored.
   stops or slows, the Live page shows a warning; bring its window to the front.
 - Face Landmarker uses the GPU and switches to the CPU once if the GPU fails or stays slow after
   warm-up.
+- The camera preview preserves the video's actual aspect ratio and shows the full frame.
+  Its green **Detected face region** outline follows landmark bounds and mirrors with the
+  preview. This is the detected face extent, not a crop or a guaranteed detection range.
+  Guidance distinguishes a missing face, a small face and a face near the image edge.
+  The outline clears after 500 ms without a fresh result, including a stalled video.
+- **Face detection → Recognize weaker faces** lowers detection/presence confidence from
+  0.5 to 0.35; tracking confidence stays at 0.5 and single-face smoothing stays enabled.
+  It may accept background false positives. **Capture more detail** requests 1280×720
+  instead of 640×480 (the camera/browser chooses the actual resolution). More pixels
+  can cost processing time and do not guarantee better model accuracy. Stop and restart
+  the camera after changing either setting. Inference continues to use the full frame.
+- **Eye closure sensitivity** and **Eyebrow sensitivity** separately scale weak expressions
+  from 0.5× to 4×; both default to 1×. Calibrate with relaxed eyes and closed lips first,
+  then increase only the weak response. Gains do not alter head or mouth controls.
+  On reacquiring a face after a gap longer than 500 ms, pose changes ease in for 200 ms;
+  full blinks still close immediately. These controls last for the current Live page.
 - With the microphone on, the voice level drives how far the mouth opens and the camera keeps
   the mouth shape. Drawn mouth images are used automatically when the project has them.
 - **Head nod sensitivity** scales up/down head rotation separately from yaw, roll and facial

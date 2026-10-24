@@ -3,6 +3,7 @@ import { rmsLevel, type FaceResult } from './tracking';
 
 export type CameraState = 'stopped' | 'starting' | 'running' | 'cameraBlocked' | 'cameraUnavailable' | 'modelError';
 export type BackgroundTracking = 'backgroundStopped' | 'backgroundSlow' | null;
+export interface CameraOptions { detail?: boolean; detectionProfile?: 'balanced' | 'sensitive' }
 type TrackProcessor = new (options: { track: MediaStreamTrack; maxBufferSize: number }) => { readable: ReadableStream<VideoFrame> };
 export class CameraCapture {
   private generation = 0;
@@ -37,13 +38,13 @@ export class CameraCapture {
     if (!this.results.length || now - this.results[this.results.length - 1] > 1000) return 'backgroundStopped';
     return this.results.length / 2 < 15 ? 'backgroundSlow' : null;
   }
-  async start(deviceId: string) {
+  async start(deviceId: string, options: CameraOptions = {}) {
     this.stop(); const generation = this.generation;
     this.onState('starting');
     let loadingModel = false;
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error('Camera unavailable');
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30, max: 30 }, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) } });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { width: { ideal: options.detail ? 1280 : 640 }, height: { ideal: options.detail ? 720 : 480 }, frameRate: { ideal: 30, max: 30 }, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) } });
       if (generation !== this.generation) { stream.getTracks().forEach(track => track.stop()); return; }
       this.stream = stream; this.video.srcObject = stream;
       const track = stream.getVideoTracks()[0];
@@ -73,7 +74,7 @@ export class CameraCapture {
         else if (data.type === 'tick' && !this.reader && performance.now() - this.lastCallback > 100) void this.sendBitmap(generation);
         else if (data.type === 'error') fail();
       };
-      worker.postMessage({ type: 'init' });
+      worker.postMessage({ type: 'init', ...(options.detectionProfile === 'sensitive' && { detectionProfile: 'sensitive' }) });
     } catch (error) {
       if (generation !== this.generation) return;
       this.stop();

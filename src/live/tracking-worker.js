@@ -5,11 +5,20 @@ self.exports = {};
 self.importScripts(`${base}/vision_bundle.js`);
 const { FaceLandmarker, FilesetResolver } = self.exports;
 let tracker, lastFrame = -Infinity, delegate = 'GPU', frames = 0, gpuSamples = 0, gpuMs = 0;
+function faceBounds(points) {
+  const valid = (points ?? []).filter(p => Number.isFinite(p.x) && Number.isFinite(p.y));
+  if (valid.length < 3) return undefined;
+  const xs = valid.map(p => p.x), ys = valid.map(p => p.y);
+  const x = Math.min(...xs), y = Math.min(...ys), right = Math.max(...xs), bottom = Math.max(...ys);
+  return { x, y, width: right - x, height: bottom - y };
+}
 self.onmessage = async ({ data }) => {
   if (data.type === 'init') {
     try {
       const files = await FilesetResolver.forVisionTasks(base);
-      const options = { runningMode: 'VIDEO', numFaces: 1, outputFaceBlendshapes: true, outputFacialTransformationMatrixes: true };
+      const threshold = data.detectionProfile === 'sensitive' ? .35 : .5;
+      const options = { runningMode: 'VIDEO', numFaces: 1, outputFaceBlendshapes: true, outputFacialTransformationMatrixes: true,
+        minFaceDetectionConfidence: threshold, minFacePresenceConfidence: threshold, minTrackingConfidence: .5 };
       try { tracker = await FaceLandmarker.createFromOptions(files, { ...options, baseOptions: { modelAssetPath: `${base}/face_landmarker.task`, delegate } }); }
       catch {
         delegate = 'CPU';
@@ -25,8 +34,10 @@ self.onmessage = async ({ data }) => {
       if (tracker && data.timestamp - lastFrame >= 1000 / 30 - 2) {
         lastFrame = data.timestamp;
         const start = performance.now(), result = tracker.detectForVideo(data.frame, now), elapsed = performance.now() - start;
+        const bounds = faceBounds(result.faceLandmarks[0]);
         self.postMessage({ type: 'result', elapsed, result: {
           faceLandmarks: result.faceLandmarks.length ? [[]] : [],
+          ...(bounds && { faceBounds: bounds }),
           faceBlendshapes: result.faceBlendshapes,
           facialTransformationMatrixes: result.facialTransformationMatrixes,
         } });

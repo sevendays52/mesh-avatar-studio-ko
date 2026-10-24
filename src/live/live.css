@@ -32,7 +32,10 @@ input[type="color"] { width: 100%; height: 32px; border: 0; padding: 0; }
 .live-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
 .live-primary { background: #2d67b2; color: white; border-color: #2d67b2; }
 .live-open { display: inline-block; border: 1px solid #2d67b2; border-radius: 7px; padding: 8px 10px; color: #2d67b2; text-decoration: none; }
-.camera-preview { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 7px; background: #162132; }
+.camera-monitor { position: relative; overflow: hidden; border-radius: 7px; background: #162132; }
+.camera-preview { display: block; width: 100%; height: 100%; object-fit: contain; }
+.face-region { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.face-region rect { fill: none; stroke: #40e0a0; stroke-width: 2; }
 .camera-hidden { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .obs-url { font-size: 11px; margin: 10px 0; }
 .live-privacy { color: #546a87; font-size: 12px; margin: 0 4px; }

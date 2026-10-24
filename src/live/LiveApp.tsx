@@ -14,9 +14,11 @@ import { createLiveSender, receiveExpression, receiveLightingPreset, sendLightin
 import { AvatarFraming } from './AvatarFraming';
 import { defaultViewport, loadViewport, saveViewport } from './viewport';
 import { EXPRESSION_TOKEN_PATH, LIGHTING_PRESET_PATH } from './expression-protocol';
+import { checkedBounds, coverageHint, coverageText, type FaceBounds } from './coverage';
 
 export function LiveApp() {
   const { language, setLanguage } = useI18n(), t = liveText[language];
+  const coverage = coverageText[language];
   const [settings, setSettings] = useState(() => { const view = viewSettings(location.search); return { ...view, viewport: view.viewport ?? loadViewport(view.project), lighting: view.lighting ?? loadLighting(view.project) }; });
   const [viewRig, setViewRig] = useState<Rig | null>(null);
   const [lightingOpen, setLightingOpen] = useState(false);
@@ -26,7 +28,11 @@ export function LiveApp() {
   const [expression, setExpression] = useState<LiveExpression>('neutral');
   const expressionRef = useRef(expression); expressionRef.current = expression;
   const [remote, setRemote] = useState<{ url: string; token: string } | null>(null), [remoteCopied, setRemoteCopied] = useState<'url' | 'token' | null>(null);
-  const [options, setOptions] = useState<Required<TrackingOptions>>({ mirror: true, sensitivity: 1, smoothing: 0.35, mouthSensitivity: 2, mouthShapeSensitivity: 2, pitchSensitivity: 2, invertPitch: false });
+  const [options, setOptions] = useState<Required<TrackingOptions>>({ mirror: true, sensitivity: 1, smoothing: 0.35, mouthSensitivity: 2, mouthShapeSensitivity: 2, pitchSensitivity: 2, invertPitch: false, eyeSensitivity: 1, browSensitivity: 1 });
+  const [detectionProfile, setDetectionProfile] = useState<'balanced' | 'sensitive'>('balanced');
+  const [cameraDetail, setCameraDetail] = useState(false), [cameraAspect, setCameraAspect] = useState(4 / 3);
+  const [bounds, setBounds] = useState<FaceBounds | null>(null);
+  const boundsUpdated = useRef(-Infinity);
   const [cameraState, setCameraState] = useState<CameraState>('stopped');
   const [micState, setMicState] = useState<MicState>('micOff');
   const [tracking, setTracking] = useState(false), [showCamera, setShowCamera] = useState(true);
@@ -45,7 +51,12 @@ export function LiveApp() {
   const controls = useRef({ options, gain, micState, cameraState }); controls.current = { options, gain, micState, cameraState };
   const refreshDevices = () => { void navigator.mediaDevices?.enumerateDevices().then(setDevices).catch(() => undefined); };
   useEffect(() => {
-    const capture = new CameraCapture(video.current!, (result, now) => pose.current.update(result, now), state => { setCameraState(state); if (state !== 'running') setTracking(false); });
+    const capture = new CameraCapture(video.current!, (result, now) => {
+      pose.current.update(result, now);
+      if (now - boundsUpdated.current >= 100 || !result.faceLandmarks.length) {
+        boundsUpdated.current = now; setBounds(checkedBounds(result.faceBounds));
+      }
+    }, state => { setCameraState(state); if (state !== 'running') { setTracking(false); setBounds(null); boundsUpdated.current = -Infinity; } });
     const mic = new MicrophoneCapture(setMicState);
     camera.current = capture; microphone.current = mic;
     refreshDevices(); navigator.mediaDevices?.addEventListener('devicechange', refreshDevices);
@@ -58,6 +69,9 @@ export function LiveApp() {
     const clock = new Worker(new URL('./clock-worker.ts', import.meta.url), { type: 'module' });
     clock.onmessage = () => {
       const now = performance.now();
+      if (Number.isFinite(boundsUpdated.current) && now - boundsUpdated.current > 500) {
+        boundsUpdated.current = -Infinity; setBounds(null);
+      }
       view?.updateIfStalled(now);
       setBackgroundStatus(camera.current?.backgroundStatus(document.visibilityState === 'hidden' || !!view?.paintPaused(now), now) ?? null);
     };
@@ -153,9 +167,11 @@ export function LiveApp() {
       {duplicatePage && <p role="alert" className="live-warning" data-testid="duplicate-live-page">{t.duplicatePage}</p>}
       <AvatarFraming value={settings.viewport ?? defaultViewport} onChange={changeViewport} canvas={canvas} rig={viewRig} fit={settings.fit} language={language} />
       <section><h2>{t.camera}</h2><label>{t.device}<select aria-label={t.camera} value={cameraId} disabled={cameraActive} onChange={event => setCameraId(event.target.value)}><option value="">{t.defaultDevice}</option>{devices.filter(device => device.kind === 'videoinput' && device.deviceId).map((device, i) => <option key={device.deviceId} value={device.deviceId}>{device.label || `${t.camera} ${i + 1}`}</option>)}</select></label>
+        <label>{coverage.profile}<select aria-label={coverage.profile} value={detectionProfile} disabled={cameraActive} onChange={event => setDetectionProfile(event.target.value === 'sensitive' ? 'sensitive' : 'balanced')}><option value="balanced">{coverage.balanced}</option><option value="sensitive">{coverage.sensitive}</option></select></label>
+        <label className="live-check"><input type="checkbox" checked={cameraDetail} disabled={cameraActive} onChange={event => setCameraDetail(event.target.checked)} />{coverage.detail}</label><small>{coverage.hint}</small>
         <div className="live-buttons"><button className="live-primary" disabled={!cameraActive && viewState !== 'ready'} onClick={() => {
           setCalibrated(false); pose.current.reset();
-          if (cameraActive) camera.current?.stop(); else void camera.current?.start(cameraId).then(refreshDevices);
+          if (cameraActive) camera.current?.stop(); else void camera.current?.start(cameraId, { detail: cameraDetail, detectionProfile }).then(refreshDevices);
         }}>{cameraActive ? t.stop : t.start}</button><button disabled={!tracking} onClick={() => setCalibrated(pose.current.calibrate(performance.now()))}>{t.calibrate}</button></div>
         <p role="status" data-testid="tracking-status" data-state={status}>{t[status]}</p>
         {backgroundStatus && <p role="alert" className="live-error" data-testid="background-status">{t[backgroundStatus]}</p>}
@@ -167,9 +183,16 @@ export function LiveApp() {
         <label>{t.mouthSensitivity}<input type="range" aria-label={t.mouthSensitivity} min="0.5" max="4" step="0.1" value={options.mouthSensitivity} onChange={event => setOptions(current => ({ ...current, mouthSensitivity: Number(event.target.value) }))} /><output>{options.mouthSensitivity.toFixed(1)}×</output></label>
         <label>{t.mouthShapeSensitivity}<input type="range" aria-label={t.mouthShapeSensitivity} min="0.5" max="4" step="0.1" value={options.mouthShapeSensitivity} onChange={event => setOptions(current => ({ ...current, mouthShapeSensitivity: Number(event.target.value) }))} /><output>{options.mouthShapeSensitivity.toFixed(1)}×</output></label>
         <small>{t.mouthTrackingHint}</small>
+        <label>{coverage.eye}<input type="range" aria-label={coverage.eye} min="0.5" max="4" step="0.1" value={options.eyeSensitivity} onChange={event => setOptions(current => ({ ...current, eyeSensitivity: Number(event.target.value) }))} /><output>{options.eyeSensitivity.toFixed(1)}×</output></label>
+        <label>{coverage.brow}<input type="range" aria-label={coverage.brow} min="0.5" max="4" step="0.1" value={options.browSensitivity} onChange={event => setOptions(current => ({ ...current, browSensitivity: Number(event.target.value) }))} /><output>{options.browSensitivity.toFixed(1)}×</output></label>
         <label>{t.smoothing}<input type="range" min="0" max="1" step="0.05" value={options.smoothing} onChange={event => setOptions(current => ({ ...current, smoothing: Number(event.target.value) }))} /></label>
         <label className="live-check"><input type="checkbox" checked={showCamera} onChange={event => setShowCamera(event.target.checked)} />{t.cameraPreview}</label>
-        <video ref={video} autoPlay muted playsInline className={showCamera ? 'camera-preview' : 'camera-preview camera-hidden'} style={{ transform: options.mirror ? 'scaleX(-1)' : undefined }} aria-label={t.cameraPreview} />
+        <div className={showCamera ? 'camera-monitor' : 'camera-monitor camera-hidden'} style={{ aspectRatio: cameraAspect }}>
+          <video ref={video} autoPlay muted playsInline className="camera-preview" style={{ transform: options.mirror ? 'scaleX(-1)' : undefined }} aria-label={t.cameraPreview}
+            onLoadedMetadata={() => { if (video.current?.videoWidth && video.current.videoHeight) setCameraAspect(video.current.videoWidth / video.current.videoHeight); }} />
+          {bounds && <svg viewBox="0 0 1 1" preserveAspectRatio="none" role="img" aria-label={coverage.region} data-testid="face-region" className="face-region"><rect x={options.mirror ? 1 - bounds.x - bounds.width : bounds.x} y={bounds.y} width={bounds.width} height={bounds.height} vectorEffect="non-scaling-stroke" /></svg>}
+        </div>
+        {cameraState === 'running' && <small data-testid="face-coverage" data-state={coverageHint(bounds)}>{coverage[coverageHint(bounds)]}</small>}
       </section>
       <section><h2>{t.microphone}</h2><label className="live-check"><input type="checkbox" checked={micActive} disabled={!micActive && viewState !== 'ready'} onChange={event => { if (event.target.checked) void microphone.current?.start(micId).then(refreshDevices); else microphone.current?.stop(); }} />{t.microphone}</label>
         <select aria-label={t.microphone} value={micId} disabled={micActive} onChange={event => setMicId(event.target.value)}><option value="">{t.defaultDevice}</option>{devices.filter(device => device.kind === 'audioinput' && device.deviceId).map((device, i) => <option key={device.deviceId} value={device.deviceId}>{device.label || `${t.microphone} ${i + 1}`}</option>)}</select>

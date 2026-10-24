@@ -3,6 +3,8 @@ import { PARAMS } from '../../packages/runtime/src/index';
 
 export interface FaceResult {
   faceLandmarks: unknown[][];
+  /** Compact normalized image bounds; raw camera frames/landmarks stay in the worker. */
+  faceBounds?: { x: number; y: number; width: number; height: number };
   faceBlendshapes: { categories: { categoryName: string; score: number }[] }[];
   facialTransformationMatrixes: { data: number[] }[];
 }
@@ -13,6 +15,8 @@ export interface TrackingOptions {
   mouthShapeSensitivity?: number;
   pitchSensitivity?: number;
   invertPitch?: boolean;
+  eyeSensitivity?: number;
+  browSensitivity?: number;
 }
 export const clamp = (value: number, min = 0, max = 1) => Math.max(min, Math.min(max, Number.isFinite(value) ? value : min));
 export const faceNeutral: Record<string, number> = {
@@ -75,7 +79,10 @@ export function mapFace(face: RawFace, neutral: RawFace | null, options: Trackin
   const z = clamp(rotation.roll * gain * mirror, -30, 30);
   const open = (side: string) => {
     const blink = s(`eyeBlink${side}`);
-    return blink >= 0.85 ? 0 : clamp((1 - blink) / Math.max(0.2, 1 - n(`eyeBlink${side}`)), 0, 1.25);
+    if (blink >= 0.85) return 0;
+    const original = (1 - blink) / Math.max(0.2, 1 - n(`eyeBlink${side}`));
+    const eyeGain = clamp(options.eyeSensitivity ?? 1, .5, 4);
+    return clamp(eyeGain === 1 ? original : 1 - (1 - original) * eyeGain, 0, 1.25);
   };
   const smile = clamp((mean('mouthSmileLeft', 'mouthSmileRight') + mean('cheekSquintLeft', 'cheekSquintRight')) * 0.3);
   return { angleX: x, angleY: y, angleZ: z, bodyAngleX: x * 0.2, bodyAngleY: y * 0.2, bodyAngleZ: z * 0.2,
@@ -85,7 +92,7 @@ export function mapFace(face: RawFace, neutral: RawFace | null, options: Trackin
     mouthOpen: clamp((d('jawOpen') - Math.max(0, d('mouthClose'))) * mouthGain / Math.max(0.2, 1 - n('jawOpen'))),
     mouthForm: clamp((d('mouthPucker') + d('mouthFunnel') - mean('mouthSmileLeft', 'mouthSmileRight') - mean('mouthStretchLeft', 'mouthStretchRight')) * mouthShapeGain, -1, 1),
     cheekPuff: clamp(Math.max(0, d('cheekPuff') - 0.03) * gain * 1.8 / Math.max(0.2, 1 - n('cheekPuff'))),
-    browY: clamp((d('browInnerUp') + mean('browOuterUpLeft', 'browOuterUpRight') - mean('browDownLeft', 'browDownRight')) * gain, -1, 1),
+    browY: clamp((d('browInnerUp') + mean('browOuterUpLeft', 'browOuterUpRight') - mean('browDownLeft', 'browDownRight')) * gain * clamp(options.browSensitivity ?? 1, .5, 4), -1, 1),
     eyeSmile: smile, eyeSmileL: smile };
 }
 export function smoothParameters(current: Record<string, number>, target: Record<string, number>, dt: number, smoothing: number) {
@@ -99,20 +106,24 @@ export class FacePose {
   private seen = -Infinity;
   private params = { ...faceNeutral };
   private weight = 0;
+  private reacquiringUntil = -Infinity;
   update(result: FaceResult, now: number) {
     const face = readFace(result);
-    if (face) { this.face = face; this.seen = now; }
+    if (face) {
+      if (this.face && now - this.seen > 500) this.reacquiringUntil = now + 200;
+      this.face = face; this.seen = now;
+    }
   }
   calibrate(now: number) {
     if (!this.face || now - this.seen > 500) return false;
     this.neutral = structuredClone(this.face); this.params = { ...faceNeutral }; return true;
   }
-  reset() { this.face = null; this.neutral = null; this.seen = -Infinity; }
+  reset() { this.face = null; this.neutral = null; this.seen = -Infinity; this.reacquiringUntil = -Infinity; this.params = { ...faceNeutral }; this.weight = 0; }
   sample(now: number, dt: number, options: TrackingOptions) {
     const tracking = !!this.face && now - this.seen <= 500;
     const target = tracking ? mapFace(this.face!, this.neutral, options) : faceNeutral;
     const previous = this.params;
-    this.params = smoothParameters(previous, target, dt, tracking ? options.smoothing : 0.7);
+    this.params = smoothParameters(previous, target, dt, tracking ? Math.max(options.smoothing, now < this.reacquiringUntil ? .6 : 0) : 0.7);
     // The torso follows rather than snapping to the face's current orientation.
     const body = smoothParameters(previous, target, dt, tracking ? Math.max(0.6, options.smoothing) : 0.7);
     for (const key of ['bodyAngleX', 'bodyAngleY', 'bodyAngleZ']) this.params[key] = body[key];

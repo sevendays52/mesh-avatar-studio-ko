@@ -20,6 +20,17 @@ test('stopping while camera permission is pending releases the eventual stream',
   const pending = capture.start(''); capture.stop(); resolve(stream); await pending;
   expect(track.stop).toHaveBeenCalledOnce(); expect(createWorker).not.toHaveBeenCalled();
 });
+
+test('detail capture requests a full frame and passes the optional detection profile to the local worker', async () => {
+  const { stream } = media(), thread = worker(), getUserMedia = vi.fn(async () => stream);
+  vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } }); createWorker.mockReturnValue(thread);
+  const capture = new CameraCapture(video(), vi.fn(), vi.fn());
+  await capture.start('camera-2', { detail: true, detectionProfile: 'sensitive' });
+  expect(getUserMedia).toHaveBeenCalledWith({ audio: false, video: {
+    deviceId: { exact: 'camera-2' }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 },
+  } });
+  expect(thread.postMessage).toHaveBeenCalledWith({ type: 'init', detectionProfile: 'sensitive' }); capture.stop();
+});
 test('stopping during model loading terminates the worker and ignores late results', async () => {
   const { stream, track } = media(), thread = worker(), result = vi.fn();
   vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: vi.fn(async () => stream) } });

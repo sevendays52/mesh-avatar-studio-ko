@@ -6,6 +6,28 @@ import { createRig } from '../packages/runtime/src/engine/rig.js';
 import { createSpriteModule } from '../packages/runtime/src/engine/sprites.js';
 import { nearestHeadView } from '../packages/runtime/src/engine/pitch-views.js';
 const options = { mirror: false, sensitivity: 1, smoothing: 0 };
+
+test('eye and eyebrow gains strengthen weak expressions independently and keep calibrated rest neutral', () => {
+  const neutral = readFace(result(0, { eyeBlinkLeft: .2, browInnerUp: .1 }))!;
+  const face = readFace(result(12, { eyeBlinkLeft: .4, browInnerUp: .3, jawOpen: .25 }))!;
+  const normal = mapFace(face, neutral, options);
+  const strong = mapFace(face, neutral, { ...options, eyeSensitivity: 2, browSensitivity: 2 });
+  expect(normal.eyeLOpen).toBeCloseTo(.75); expect(strong.eyeLOpen).toBeCloseTo(.5);
+  expect(strong.browY).toBeCloseTo(normal.browY * 2);
+  expect(strong.angleX).toBe(normal.angleX); expect(strong.mouthOpen).toBe(normal.mouthOpen);
+  expect(strong.eyeROpen).toBe(1);
+  expect(mapFace(neutral, neutral, { ...options, eyeSensitivity: 4, browSensitivity: 4 })).toMatchObject({ eyeLOpen: 1, browY: 0 });
+});
+
+test('reacquisition eases a changed head pose while retaining decisive blinks and reset clears stale pose', () => {
+  const pose = new FacePose(); pose.update(result(30), 0); pose.sample(1, .016, options);
+  pose.update(result(-30, { eyeBlinkLeft: 1 }), 800);
+  const resumed = pose.sample(801, .016, options);
+  expect(resumed.tracking).toBe(true); expect(resumed.params.angleX).toBeGreaterThan(-20);
+  expect(resumed.params.eyeLOpen).toBe(0);
+  expect(pose.sample(1100, .016, options).params.angleX).toBe(-30);
+  pose.reset(); expect(pose.sample(1101, .016, options)).toMatchObject({ tracking: false, weight: 0, params: faceNeutral });
+});
 const multiply = (a: number[], b: number[]) => Array.from({ length: 9 }, (_, i) => {
   const row = i % 3, col = Math.floor(i / 3);
   return a[row] * b[col * 3] + a[row + 3] * b[col * 3 + 1] + a[row + 6] * b[col * 3 + 2];
