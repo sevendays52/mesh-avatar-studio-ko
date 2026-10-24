@@ -51,6 +51,9 @@ export interface Rig {
     pitch?: { maxAngle: number; depth: number; facePreservation?: number; views?: { id: string; angleY: number }[] };
     /** Independently drawn head poses. Neutral (0, 0) is implicit; degrees. */
     views?: { id: string; angleX: number; angleY: number }[];
+    /** Optional 2.5D pinhole projection. yaw/pitch in radians at parameter ±30;
+     * depth/focalLength in source pixels. Replaces legacy head travel when enabled. */
+    perspective?: { yaw: number; pitch: number; depth: number; focalLength: number };
   };
   body: {
     pivotX: number; pivotY: number; maxRoll: number;

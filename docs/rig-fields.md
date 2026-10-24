@@ -10,7 +10,7 @@ radii and mesh cell sizes must be positive. Mesh cell sizes and fine-mesh rectan
 coordinates must be integers. Accessory boxes must be integer rectangles inside the image. A band is `[start, end]` with `start < end`.
 Ellipses are smooth influence regions, not hard cut-out boundaries.
 
-Only `buns`, `strands`, `accessories`, `hand`, `head.pitch`, `head.views`, `body.motion`, `cheekPuff` and `view.gazeCenter` are optional. Omit absent
+Only `buns`, `strands`, `accessories`, `hand`, `head.pitch`, `head.perspective`, `head.views`, `body.motion`, `cheekPuff` and `view.gazeCenter` are optional. Omit absent
 optional groups. Required regions must still be placed even if their animation will be small.
 The initial draft has empty eye polygons and is intentionally invalid until they are traced.
 See [agent-guide.md](agent-guide.md) for the process and [rig-mapping.md](rig-mapping.md) for
@@ -32,6 +32,7 @@ the engine mapping. Do not copy the example illustration's coordinates into a ne
 | `head.maxRoll` | Roll magnitude at a ±30° head pose, radians; start near `0.15`. |
 | `head.weightBand` | Y range, px, where head influence fades from full to zero; below chin to collarbone. |
 | `head.turnBand` | Y range, px, where face-turn displacement fades; below chin into upper chest. |
+| `head.perspective` | Optional calibrated 2.5D projection: `{yaw, pitch, depth, focalLength}`. `yaw` and `pitch` are rotation magnitudes at ±30° controls, radians, 0–π/3. `depth` is nonnegative face-surface depth in px around `face.nose`; it fades toward the ellipse rim and neck. `focalLength` is in px and must exceed depth plus the farthest image-corner distance from the head pivot. Start with yaw `0.4`, pitch `0.35`, depth about 20% of `head.ry`, and focal length ≥3× image width. Replaces legacy head travel and per-feature parallax; roll and expression controls remain. Cannot coexist with `head.pitch`. Omit, or set both angles to zero, for exact legacy behavior. In a drawn view it acts only on residual angles, not the painted anchor. Calibrate and visually review each drawing independently; see [perspective.md](perspective.md). |
 | `head.pitch.maxAngle` | Optional neck-centred pitch projection at a ±30° `angleY` pose, radians, 0–π/3. Positive `angleY` looks up. Start near `0.45`; omit `head.pitch` to preserve legacy deformation. |
 | `head.pitch.depth` | Face-centre depth in front of the neck, px, nonnegative; fades smoothly toward the head ellipse rim and to zero at the neck pivot. Start near 20% of `head.ry`. Supply both pitch fields together. The projection adds to existing `shiftY` travel and follows `weightBand`. |
 | `head.pitch.facePreservation` | Optional 0–1 preservation of facial proportions while looking down. At `1`, brow/eye-to-jaw regions move together, with pitch blended into the crown and neck; travel is limited by space between the jaw region and the end of `weightBand`. The effect eases in over the first 15° of downward `angleY`. Omit or use `0` for exact previous pitch behavior. |

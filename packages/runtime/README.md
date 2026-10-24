@@ -108,6 +108,16 @@ Offsets use canvas widths/heights, positive right/down. Framing changes the proj
 without increasing the framebuffer dimensions or modifying the rig. Omitted viewport
 settings preserve the existing rendering. The `AvatarViewport` type is exported.
 
+Avatars can opt into combined yaw/pitch perspective with
+`head.perspective: { yaw: 0.4, pitch: 0.35, depth: 65, focalLength: 3000 }`.
+This calibrated 2.5D surface unprojects the neutral drawing, rotates around the neck,
+and reprojects it with near/far foreshortening. Closed-eye and mouth sprites share
+the transform. It replaces the legacy head displacement and feature parallax;
+omit it to retain the existing path exactly. Do not combine it with `head.pitch`.
+Drawn `head.views` can use it independently for their small residual motion.
+It cannot create hidden surfaces, occlusion or missing diagonal drawings.
+See [field limits](../../docs/rig-fields.md) and [visual review](../../docs/perspective.md).
+
 Avatars can opt into neck-centred nodding with `head.pitch: { maxAngle: 0.5, depth: 45 }`
 in their rig. `angleY` (−30 to +30 degrees; positive looks up) drives the projection;
 `maxAngle` is in radians (0–π/3) and `depth` is nonnegative source pixels. This adds

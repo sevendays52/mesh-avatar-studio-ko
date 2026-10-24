@@ -71,7 +71,8 @@ const schema = (draft: boolean) => object({
     pivotY: number, maxRoll: number, weightBand: band, turnBand: band,
     pitch: object({ maxAngle: pitchAngle, depth: nonnegative, facePreservation: unit,
       views: array(object({ id: viewId, angleY: viewAngle }), 1, 4) }, ['facePreservation', 'views']),
-    views: array(object({ id: viewId, angleX: headViewAngle, angleY: headViewAngle }), 1, 8) }, ['pitch', 'views']),
+    views: array(object({ id: viewId, angleX: headViewAngle, angleY: headViewAngle }), 1, 8),
+    perspective: object({ yaw: pitchAngle, pitch: pitchAngle, depth: nonnegative, focalLength: positive }) }, ['pitch', 'views', 'perspective']),
   body: object({ pivotX: number, pivotY: number, maxRoll: number, breathBand: band,
     rollBand: band, chest: ellipse, shoulders: array(ellipse),
     motion: object({ turn: nonnegative, nod: nonnegative, shoulder: nonnegative }) }, ['motion']),
@@ -103,6 +104,15 @@ export function validateRig(value: unknown, options: { draft?: boolean } = {}): 
   schema(options.draft ?? false)(value, 'rig', errors);
   if (errors.length) return errors;
   const rig = value as Rig;
+  if (rig.head.perspective) {
+    const p = rig.head.perspective;
+    // Every visible head vertex lies within the image. This conservative bound
+    // keeps the unprojected/rotated surface in front of the camera plane.
+    const reach = Math.hypot(Math.max(Math.abs(rig.head.pivotX), Math.abs(rig.image.width - rig.head.pivotX)),
+      Math.max(Math.abs(rig.head.pivotY), Math.abs(rig.image.height - rig.head.pivotY)));
+    if (p.focalLength <= p.depth + reach) errors.push('rig.head.perspective.focalLength: must exceed depth plus the image corner distance from the head pivot');
+    if (rig.head.pitch) errors.push('rig.head.perspective: cannot combine with head.pitch; choose one projection');
+  }
   if (rig.cheekPuff && rig.cheekPuff.regions[0].cx >= rig.cheekPuff.regions[1].cx)
     errors.push('rig.cheekPuff.regions: order image-left before image-right');
   if (rig.cheekPuff && rig.cheekPuff.regions.some(area => rig.cheekPuff!.displacement > Math.min(area.rx, area.ry) / 2))

@@ -1,4 +1,5 @@
 import { warpHeadPoint, cacheHeadMorph } from './head-warp.js';
+import { createHeadPerspective } from './head-perspective.js';
 
 export const PARAMS = [
   { id: 'angleX', label: 'Face angle X', min: -30, max: 30, def: 0, group: 'Head and body' },
@@ -97,6 +98,7 @@ export function createRig(rig) {
   // The turn field is a smooth bump over the head. It is deliberately larger than the
   // face so its rim falls in the background, and its slope is zero at the rim.
   const HEAD = rig.head;
+  const perspective = createHeadPerspective(rig);
   const BODY = rig.body;
   const PUFF = rig.cheekPuff;
   let headWarp = null;
@@ -216,6 +218,14 @@ export function createRig(rig) {
       if (w > 0) rotateAround(p, pivot[0], pivot[1], -P.angleZ / 30 * HEAD.maxRoll * w);
       return;
     }
+    if (perspective) {
+      if (w <= 0) return;
+      const q = perspective(p[0], p[1], P.angleX, P.angleY);
+      p[0] += (q[0] - p[0]) * w;
+      p[1] += (q[1] - p[1]) * w;
+      rotateAround(p, HEAD.pivotX, HEAD.pivotY, -P.angleZ / 30 * HEAD.maxRoll * w);
+      return;
+    }
     const preserve = facePreservation(p[0], p[1], P);
     // Opt-in orthographic pitch around the neck. The smooth depth field keeps the
     // contour continuous while the face moves in front of the hair. All layers and
@@ -284,10 +294,12 @@ export function createRig(rig) {
     // head turn, per part: nose and mouth travel further than the eyes, the far eye
     // narrows and the near eye widens, the ears and buns slide the other way
     const ax = P.angleX / 30, ay = headWarp ? 0 : P.angleY / 30 * (1 - facePreservation(x, y, P));
-    p[0] += ax * (8 * w.nose + 5 * w.mouth) + (x - rig.face.eyeA.cx) * 0.12 * ax * w.eyeA - (x - rig.face.eyeB.cx) * 0.12 * ax * w.eyeB
+    if (!perspective) {
+      p[0] += ax * (8 * w.nose + 5 * w.mouth) + (x - rig.face.eyeA.cx) * 0.12 * ax * w.eyeA - (x - rig.face.eyeB.cx) * 0.12 * ax * w.eyeB
       - ax * 9 * w.earR + ax * 4 * w.earL - ax * 10 * (w.bunL + w.bunR);
-    p[1] -= ay * (6 * w.nose + 3 * w.mouth);
-    p[1] += (y - rig.face.eyeA.cy) * -0.06 * Math.abs(ay) * w.eyeA + (y - rig.face.eyeB.cy) * -0.06 * Math.abs(ay) * w.eyeB;
+      p[1] -= ay * (6 * w.nose + 3 * w.mouth);
+      p[1] += (y - rig.face.eyeA.cy) * -0.06 * Math.abs(ay) * w.eyeA + (y - rig.face.eyeB.cy) * -0.06 * Math.abs(ay) * w.eyeB;
+    }
     applyHead(p, w.head, P, w.turn, w.morphs);
     applyBody(p, y, P, w.chest, w.breath, w.shoulder);
     return p;
