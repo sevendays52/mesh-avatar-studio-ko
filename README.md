@@ -63,19 +63,51 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-launcher.ps1
 복사합니다. 실행파일만 빌드하려면 `-WithoutRuntime`을 사용하세요(실행할 PC에 Node.js 필요).
 이미지 인식·리그 제작은 Codex에서 진행하며, Python·uv·Chromium 등 제작 도구는 별도 준비합니다.
 
+### macOS에서 더블클릭으로 시작
+
+Node.js **22.17 이상과 npm**을 설치한 뒤, 이 저장소 폴더의
+**`MeshAvatarStudio.command`를 더블클릭**하세요. 터미널이 열리고 환경 점검 후
+한국어 프로젝트 선택 화면을 브라우저로 엽니다. 패키지가 없으면 첫 실행에서
+`npm ci`로 자동 설치합니다(인터넷 연결 필요). Windows용 `.exe`와 포함된
+`node.exe`는 사용하지 않으며, 맥에 설치한 Node.js·npm을 사용합니다.
+
+편집·Live·OBS 사용 중에는 열린 터미널을 유지하세요. **Control+C를 누르거나
+터미널 창을 닫으면 서버가 종료**됩니다. 다시 시작할 때는 `.command`를 더블클릭하세요.
+프로젝트 만들기 → 이미지 선택 → Codex 요청문 복사 → 완성된 아바타 열기 흐름은 Windows와 같습니다.
+
+Git으로 clone하면 실행 권한이 함께 내려옵니다. ZIP 압축 해제 등으로 실행 권한이
+없어졌다면 저장소 폴더의 터미널에서 `chmod +x MeshAvatarStudio.command`를 실행하세요.
+Node 버전 관리자를 사용한다면 로그인/대화형 zsh에서 Node가 보이도록 설정하세요.
+스크립트는 Homebrew·사용자 도구 경로와 로그인 셸의 PATH를 확인합니다.
+
+아바타 제작과 레이어 재생성을 위해서는 **uv와 일반 Python 3.10~3.13**,
+포즈 이미지 검토를 위해서는 **Playwright Chromium**도 준비하세요.
+uv가 설치된 상태에서 다음을 한 번 실행합니다:
+
+```sh
+npm ci
+uv python install 3.12
+npx playwright install chromium
+node tools/doctor.mjs --lang ko
+```
+
+uv 설치: [공식 설치 안내](https://docs.astral.sh/uv/getting-started/installation/).
+환경 점검의 경고는 편집기 실행과 별개이며, 아바타 제작 전에 해결해야 합니다.
+Live의 카메라·마이크는 브라우저 권한과 macOS의 개인정보 보호 설정도 확인하세요.
+
 ### 터미널에서 실행
 
-Node.js **22.17 이상**과 Git이 필요합니다. 레이어 제작·재생성에는 **Python 3.10 이상과 uv**, 포즈 이미지 검토에는 **Playwright Chromium**도 필요합니다.
+Node.js **22.17 이상**과 Git이 필요합니다. 레이어 제작·재생성에는 **일반 Python 3.10~3.13과 uv**, 포즈 이미지 검토에는 **Playwright Chromium**도 필요합니다.
 
 ```sh
 git clone https://github.com/sevendays52/mesh-avatar-studio-ko.git
 cd mesh-avatar-studio-ko
 npm ci
 node tools/doctor.mjs --lang ko
-npm run dev
+npm start
 ```
 
-터미널에 표시된 주소(예: `http://127.0.0.1:5173/`)를 열고 상단에서 **한국어**를 선택하세요. 언어 선택은 브라우저에 저장됩니다. 처음에는 Miko 샘플이 열립니다. 샘플 수정 시 **복사하고 편집 계속**을 선택하면 `projects/`의 사본으로 작업합니다.
+`npm start`는 한국어 프로젝트 선택 화면을 브라우저로 엽니다. 개발용 `npm run dev`는 터미널에 표시된 주소(예: `http://127.0.0.1:5173/`)를 직접 열며 기본적으로 Miko 샘플을 표시합니다. 상단 언어 선택은 브라우저에 저장됩니다. 샘플 수정 시 **복사하고 편집 계속**을 선택하면 `projects/`의 사본으로 작업합니다.
 
 제작 도구가 없다면 먼저 uv를 설치한 뒤 다음을 실행하세요. 설치 상태는 `node tools/doctor.mjs --lang ko`로 다시 확인할 수 있습니다.
 
@@ -127,6 +159,7 @@ npm run build:site
 npm run e2e
 uv run --with numpy --with pillow --with opencv-python-headless tools/test_build_layers.py
 uv run tools/test_agent_tools.py
+uv run tools/test_head_views.py
 ```
 
 기존 변형의 수치 회귀는 **0px**를 유지해야 합니다(물리는 부동소수점 허용 오차). 아바타 빌드 전에는 `npm run validate-rig -- projects/<이름>/rig.draft.json`, 빌드 후에는 `npm run render-poses -- projects/<이름>`을 실행하고 결과를 직접 확인하세요. 새 효과는 해당 데이터를 설정한 프로젝트로도 검토해야 합니다.

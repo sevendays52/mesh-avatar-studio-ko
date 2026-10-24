@@ -32,7 +32,7 @@ layer and sprite metadata, compatibility rules, and whole-folder validation.
 
 ## Build a project by hand
 
-The layer builder requires Python 3.10+ and [uv](https://docs.astral.sh/uv/).
+The layer builder requires regular Python 3.10–3.13 (recommended: `uv python install 3.12`) and [uv](https://docs.astral.sh/uv/).
 It runs locally with NumPy, Pillow and OpenCV; these are build tools, not browser dependencies.
 The other Python tools declare dependencies inline for bare `uv run`. The validator and
 pose renderer use Node.js 22.17+; install Node dependencies with `npm ci` and Chromium with

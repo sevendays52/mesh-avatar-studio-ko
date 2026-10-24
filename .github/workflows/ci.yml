@@ -71,3 +71,23 @@ jobs:
 
       - name: Test agent tools
         run: uv run tools/test_agent_tools.py
+
+      - name: Test head view tools
+        run: uv run tools/test_head_views.py
+
+  macos-launcher:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.12'
+      - run: npx playwright install chromium
+      - run: node tools/doctor.mjs --lang ko
+      - run: /bin/zsh -n MeshAvatarStudio.command
+      - run: npx vitest run tests/doctor.test.ts tests/launcher.test.ts

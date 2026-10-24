@@ -12,13 +12,13 @@ describe('environment check', () => {
   test('passes with every tool and tells the person how to start the editor', async () => {
     const results = await checkEnvironment('en', ready);
     expect(statuses(results)).toEqual({ node: 'ok', packages: 'ok', uv: 'ok', python: 'ok', chromium: 'ok' });
-    expect(formatReport(results, 'en')).toContain('Everything is ready. Start the editor with: npm run dev');
+    expect(formatReport(results, 'en')).toContain('Everything is ready. Start the editor with: npm start');
   });
 
   test('an old Node.js or missing packages are errors', async () => {
     const results = await checkEnvironment('en', { ...ready, node: async () => '20.19.0', packages: async () => false });
     expect(statuses(results)).toMatchObject({ node: 'error', packages: 'error' });
-    expect(formatReport(results, 'en')).toMatch(/✗ Node\.js 22\.17 or later is required \(found 20\.19\.0\)[\s\S]*✗ Packages are not installed\. Run: npm install[\s\S]*Fix the errors above/);
+    expect(formatReport(results, 'en')).toMatch(/✗ Node\.js 22\.17 or later is required \(found 20\.19\.0\)[\s\S]*✗ Packages are not installed\. Run: npm ci[\s\S]*Fix the errors above/);
   });
 
   test('missing uv, Python or Chromium are warnings that keep the editor usable', async () => {
@@ -28,7 +28,7 @@ describe('environment check', () => {
     expect(report).toContain('Python was not checked because uv is missing.');
     expect(report).toContain('Creating avatars with an agent, or importing drawn eyes and mouths, needs it');
     expect(report).toContain('npx playwright install chromium');
-    expect(report).toContain('You can start the editor with: npm run dev');
+    expect(report).toContain('You can start the editor with: npm start');
     const noPython = await checkEnvironment('en', { ...ready, python: async () => null });
     expect(formatReport(noPython, 'en')).toContain('uv python install 3.12');
   });
@@ -39,11 +39,26 @@ describe('environment check', () => {
     expect(formatReport(results, 'en')).toContain('free-threaded Python 3.14.0');
   });
 
+  test('unsupported Python versions cannot report avatar tools ready', async () => {
+    for (const python of ['3.9.23', '3.14.0', '4.0.0']) {
+      const results = await checkEnvironment('en', { ...ready, python: async () => python });
+      expect(statuses(results).python).toBe('warn');
+      expect(formatReport(results, 'en')).toContain('uv python install 3.12');
+    }
+  });
+
+  test('the macOS entry point is shown only on macOS', async () => {
+    const results = await checkEnvironment('ko', ready);
+    expect(formatReport(results, 'ko', 'darwin')).toContain('MeshAvatarStudio.command');
+    expect(formatReport(results, 'ko', 'win32')).not.toContain('MeshAvatarStudio.command');
+    expect(formatReport(results, 'ko', 'linux')).not.toContain('MeshAvatarStudio.command');
+  });
+
   test('reports in Japanese, chosen by flag or locale', async () => {
     expect([language(['--lang', 'ja'], {}), language(['--lang=en'], { LANG: 'ja_JP.UTF-8' }), language([], { LANG: 'ja_JP.UTF-8' }), language([], { LANG: 'en_US.UTF-8' })]).toEqual(['ja', 'en', 'ja', 'en']);
     const report = formatReport(await checkEnvironment('ja', { ...ready, chromium: async () => false }), 'ja');
     expect(report).toContain('⚠ Playwright の Chromium が見つかりません。エディタと配信画面はこのまま使えます。');
-    expect(report).toContain('エディタは次のコマンドで起動できます: npm run dev');
+    expect(report).toContain('エディタは次のコマンドで起動できます: npm start');
   });
 
   test('reports in Korean, with explicit flags taking precedence over locale', async () => {
@@ -52,7 +67,7 @@ describe('environment check', () => {
     const report = formatReport(await checkEnvironment('ko', { ...ready, uv: async () => null, chromium: async () => false }), 'ko');
     expect(report).toContain('uv가 없어 Python을 확인하지 않았습니다.');
     expect(report).toContain('npx playwright install chromium');
-    expect(report).toContain('편집기 실행: npm run dev');
+    expect(report).toContain('편집기 실행: npm start');
     expect(formatReport(await checkEnvironment('ko', { ...ready, packages: async () => false }), 'ko')).toContain('위 오류를 해결하세요');
   });
 });

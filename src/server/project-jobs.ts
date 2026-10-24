@@ -2,6 +2,7 @@ import { homedir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { copyFile, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { join, resolve, relative, dirname } from 'node:path';
+import { PYTHON_SPEC } from '../../tools/python-spec.mjs';
 
 export const VARIANTS = ['eyes_closed', 'eyes_half', 'eyes_smile', 'eyes_sad', 'eyes_surprise', 'mouth_a', 'mouth_a_half', 'mouth_i', 'mouth_o', 'mouth_angry', 'mouth_sad'] as const;
 export type Tool = 'build-layers' | 'variant-requests' | 'build-sprites';
@@ -13,7 +14,6 @@ export type Runner = (root: string, project: string, tool: Tool) => Promise<stri
 // unconstrained ">=3.10" can resolve to a managed cpython-3.14+freethreaded
 // interpreter (uv's newest match on a machine with nothing cached yet) and fail
 // the pip install. CI already pins 3.12 for the same reason; keep this in sync.
-const PYTHON_SPEC = '>=3.10,<3.14';
 export const runTool: Runner = (root, project, tool) => new Promise((done, reject) => {
   const args = ['run', '--no-project', '--no-python-downloads', '--python', PYTHON_SPEC, '--with', 'numpy', '--with', 'pillow', '--with', 'opencv-python-headless', resolve(root, `tools/${tool}.py`), project];
   execFile('uv', args, { cwd: root, timeout: 120_000, maxBuffer: 2 * 1024 * 1024 }, (error, stdout, stderr) => {

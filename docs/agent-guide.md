@@ -10,10 +10,16 @@ quality of the result depends on looking at your own output and correcting it.
 ## Before you start
 
 ### Tools
-Node.js 22.17+, Python 3.10+ with [uv](https://docs.astral.sh/uv/), and Playwright Chromium
-(`npx playwright install chromium`). Run `npm install` once, then `npm run doctor`: it reports
+Node.js 22.17+, regular Python 3.10–3.13 (recommended: 3.12) with [uv](https://docs.astral.sh/uv/), and Playwright Chromium
+(`npx playwright install chromium`). Run `npm ci` once, then `npm run doctor`: it reports
 each missing tool. Treat its warnings as blockers for this guide, since every step below needs
 uv, Python or Chromium.
+
+On macOS, double-click the executable `MeshAvatarStudio.command` to run Studio; keep
+its terminal open and stop with Control+C or close the window. It checks Homebrew/user
+tool paths and the login shell environment, then uses the same local server as Windows.
+For preparation, install Python with `uv python install 3.12` and run
+`node tools/doctor.mjs --lang ko`. Windows keeps its `.exe` launcher; Linux uses `npm start`.
 
 ### Model
 Reading pixel coordinates from images needs strong vision. Use an image-capable coding

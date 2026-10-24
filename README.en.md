@@ -56,19 +56,37 @@ This uses the Windows C# compiler and copies your installed Node.js/npm into the
 `-WithoutRuntime` builds only the launcher and requires Node.js on the destination PC.
 Codex still prepares the rig; Python, uv and Chromium remain separate authoring prerequisites.
 
+### macOS launcher
+
+Install **Node.js 22.17+ with npm**, then double-click **`MeshAvatarStudio.command`**
+in this repository. It opens Terminal, checks the environment and opens the Korean
+project-selection page in your browser. Missing packages are installed with `npm ci`
+on first launch (internet required). It uses your Mac's Node.js/npm, not Windows' bundled runtime.
+Keep Terminal open while editing or streaming; **Control+C or closing that window stops the server**.
+The project/image/Codex handoff is the same as on Windows.
+
+If a ZIP extraction lost executable permissions, run `chmod +x MeshAvatarStudio.command`.
+Homebrew/user tool paths and the login shell PATH are checked. Version-manager installations
+must expose Node in a login/interactive zsh. Creating avatars needs uv, regular Python
+**3.10–3.13** (recommended: `uv python install 3.12`) and `npx playwright install chromium`.
+After installing packages with `npm ci`, run `node tools/doctor.mjs --lang en`.
+See [uv installation](https://docs.astral.sh/uv/getting-started/installation/).
+Fix authoring-tool warnings before making avatars. Check browser and macOS camera/microphone
+permissions for Live. No user image is sent by launching Studio.
+
 ### Terminal setup
 
-Requires **Node.js 22.17+** and Git. Creating/rebuilding layers also requires **Python 3.10+ and uv**. Pose rendering requires **Playwright Chromium**.
+Requires **Node.js 22.17+** and Git. Creating/rebuilding layers also requires **regular Python 3.10–3.13 and uv**. Pose rendering requires **Playwright Chromium**.
 
 ```sh
 git clone https://github.com/sevendays52/mesh-avatar-studio-ko.git
 cd mesh-avatar-studio-ko
 npm ci
 node tools/doctor.mjs --lang en
-npm run dev
+npm start
 ```
 
-Open the printed URL, such as `http://127.0.0.1:5173/`. Choose English, 한국어 or 日本語 in the header; the browser remembers your choice. Studio initially opens Miko. Use **Copy and continue editing** to work on a copy under `projects/`.
+`npm start` opens the Korean project-selection page in your browser. Choose English, 한국어 or 日本語 in the header; the browser remembers your choice. For development, `npm run dev` prints a URL such as `http://127.0.0.1:5173/` to open manually and initially shows Miko. Use **Copy and continue editing** to work on a copy under `projects/`.
 
 After installing uv, install missing authoring tools and run the diagnostics again:
 
@@ -120,6 +138,7 @@ npm run build:site
 npm run e2e
 uv run --with numpy --with pillow --with opencv-python-headless tools/test_build_layers.py
 uv run tools/test_agent_tools.py
+uv run tools/test_head_views.py
 ```
 
 Existing deformation regression must remain **0 px**, with floating-point tolerance for physics. Before building an avatar, run `npm run validate-rig -- projects/<name>/rig.draft.json`. Afterwards, run `npm run render-poses -- projects/<name>` and inspect the images. Also review new effects with a project that supplies their optional data.

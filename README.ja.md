@@ -56,19 +56,39 @@ Windows の C# コンパイラを使い、インストール済みの Node.js・
 `-WithoutRuntime` は実行ファイルだけを作ります（実行先の Node.js が必要です）。
 リグ制作は Codex で進め、Python・uv・Chromium などの制作ツールは別途準備します。
 
+### macOS でダブルクリックして起動
+
+**Node.js 22.17 以降と npm** を用意し、このフォルダの
+**`MeshAvatarStudio.command` をダブルクリック**してください。ターミナルで環境を
+確認し、ブラウザに韓国語のプロジェクト選択画面を開きます。未導入のパッケージは
+初回に `npm ci` でインストールします（インターネット接続が必要）。
+Windows 用ランタイムではなく Mac にインストールした Node.js/npm を使います。
+編集中・配信中はターミナルを開いたままにしてください。
+**Control+C またはウィンドウを閉じるとサーバーが終了**します。
+プロジェクト作成・画像選択・Codex への依頼は Windows と同じです。
+
+ZIP 展開などで実行権限が失われた場合は `chmod +x MeshAvatarStudio.command` を実行します。
+Homebrew・ユーザーツール・ログインシェルの PATH を確認します。バージョン管理ツールを
+使う場合はログイン／対話型 zsh から Node が見えるようにしてください。
+制作には uv と通常版 Python **3.10〜3.13**（推奨: `uv python install 3.12`）、
+ポーズ確認には `npx playwright install chromium` も必要です。
+`npm ci` 後に `node tools/doctor.mjs --lang ja` で確認してください。
+[uv の導入手順](https://docs.astral.sh/uv/getting-started/installation/)を参照し、制作前に
+警告を解消してください。Live ではブラウザと macOS のカメラ・マイク権限も確認します。
+
 ### ターミナルから起動
 
-**Node.js 22.17 以上**と Git が必要です。レイヤーの制作・再生成には **Python 3.10 以上と uv**、ポーズ画像の確認には **Playwright Chromium** も必要です。
+**Node.js 22.17 以上**と Git が必要です。レイヤーの制作・再生成には **通常版 Python 3.10〜3.13 と uv**、ポーズ画像の確認には **Playwright Chromium** も必要です。
 
 ```sh
 git clone https://github.com/sevendays52/mesh-avatar-studio-ko.git
 cd mesh-avatar-studio-ko
 npm ci
 node tools/doctor.mjs --lang ja
-npm run dev
+npm start
 ```
 
-表示された URL（例: `http://127.0.0.1:5173/`）を開き、上部で **日本語**を選びます。言語はブラウザに保存されます。最初はミコのサンプルが開きます。変更時に **コピーして編集を続ける** を選ぶと `projects/` のコピーで作業できます。
+`npm start` は韓国語のプロジェクト選択画面をブラウザに開きます。上部で **日本語**を選ぶと言語が保存されます。開発用の `npm run dev` は表示された URL（例: `http://127.0.0.1:5173/`）を手動で開き、最初はミコのサンプルを表示します。変更時に **コピーして編集を続ける** を選ぶと `projects/` のコピーで作業できます。
 
 制作ツールが不足している場合は uv をインストールしてから、次を実行して環境チェックをやり直してください。
 
@@ -120,6 +140,7 @@ npm run build:site
 npm run e2e
 uv run --with numpy --with pillow --with opencv-python-headless tools/test_build_layers.py
 uv run tools/test_agent_tools.py
+uv run tools/test_head_views.py
 ```
 
 既存変形の数値回帰は **0 px** を維持します（物理演算は浮動小数点誤差を許容）。制作前に `npm run validate-rig -- projects/<名前>/rig.draft.json`、制作後に `npm run render-poses -- projects/<名前>` を実行し、画像を目視確認してください。新しい効果は対応データを設定したプロジェクトでも確認します。

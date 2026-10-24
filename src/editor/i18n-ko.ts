@@ -73,7 +73,7 @@ export const workflowKo: typeof workflowEn = {
   jobFaceRegion: '얼굴의 FIELD 분리 영역을 확인하세요. 가로·세로 반지름은 양수여야 합니다.',
   jobImageSize: '원본 이미지 크기가 프로젝트 설정과 다릅니다. 서로 일치하는 source.png와 rig.json을 사용하세요.',
   jobMeshRegion: '메쉬 격자 크기와 세밀한 영역을 확인하세요. 격자 크기는 양의 정수이며 영역에 너비와 높이가 있어야 합니다.',
-  jobFailed: '로컬 도구가 작업을 완료하지 못했습니다. 이전 레이어는 유지됩니다.', dependenciesHelp: 'uv와 Python 3.10 이상을 설치한 뒤 다시 시도하세요. Homebrew: brew install uv python. 설치 안내: docs/agent-guide.md.',
+  jobFailed: '로컬 도구가 작업을 완료하지 못했습니다. 이전 레이어는 유지됩니다.', dependenciesHelp: 'uv와 일반 Python 3.10~3.13을 준비한 뒤 다시 시도하세요. Python 설치: uv python install 3.12. 설치 안내: docs/agent-guide.md.',
   unsafeFilesHelp: '프로젝트에 다른 위치로 연결된 파일이 있습니다. 이 프로젝트 안의 일반 파일로 바꾼 뒤 다시 시도하세요.', showLog: '로그 보기', operationBusy: '로컬에서 처리 중…', reloadFailed: '프로젝트를 다시 불러오지 못했습니다. 현재 화면은 유지됩니다.',
   variantsTitle: '표정 그림', variantMissing: '없음', variantsHelp: '감은 눈, 말하는 입, 화남·슬픔·놀람 표정을 따로 그리면 움직임이 더 자연스러워집니다.',
   eyesClosed: '감은 눈', eyesHalf: '반쯤 감은 눈', eyesSmile: '웃는 눈', eyesSad: '슬픈 눈', eyesSurprise: '놀란 눈', mouthA: '입 ‘아’', mouthAHalf: '반쯤 열린 ‘아’', mouthI: '입 ‘이’', mouthO: '입 ‘오’', mouthAngry: '화난 입', mouthSad: '슬픈 입',

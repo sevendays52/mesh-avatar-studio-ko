@@ -3,17 +3,20 @@ import { existsSync, realpathSync } from 'node:fs';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { delimiter, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { nodeVersionOk } from './doctor.mjs';
+import { nodeVersionOk, checkEnvironment, formatReport } from './doctor.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 process.chdir(root);
 // npm lifecycle scripts also need to find the bundled node executable.
 process.env.PATH = [dirname(process.execPath), process.env.PATH].filter(Boolean).join(delimiter);
-if (!nodeVersionOk(process.version)) throw new Error('Node.js 22.17+ is required. Rebuild the launcher runtime or install a supported Node.js.');
+const installHint = process.platform === 'win32'
+  ? 'Rebuild with tools/build-launcher.ps1 or install Node.js 22.17+ with npm.'
+  : 'Install Node.js 22.17+ with npm, then reopen MeshAvatarStudio.command on macOS or run npm start.';
+if (!nodeVersionOk(process.version)) throw new Error(`Node.js 22.17+ is required. ${installHint}`);
 
 function npmCli() {
   const bundled = resolve(root, 'tools/launcher-runtime/node_modules/npm/bin/npm-cli.js');
-  if (existsSync(bundled)) return bundled;
+  if (process.platform === 'win32' && existsSync(bundled)) return bundled;
   const besideNode = resolve(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js');
   if (existsSync(besideNode)) return besideNode;
   if (process.platform === 'win32') {
@@ -26,7 +29,7 @@ function npmCli() {
     const command = execFileSync('which', ['npm'], { encoding: 'utf8' }).trim();
     if (existsSync(command)) return realpathSync(command);
   }
-  throw new Error('npm was not found. Rebuild with tools/build-launcher.ps1 or install Node.js with npm.');
+  throw new Error(`npm was not found. ${installHint}`);
 }
 
 if (!existsSync(resolve(root, 'node_modules/vite/package.json')) || !existsSync(resolve(root, 'node_modules/react/package.json'))) {
@@ -36,6 +39,12 @@ if (!existsSync(resolve(root, 'node_modules/vite/package.json')) || !existsSync(
     child.once('error', reject); child.once('exit', done);
   });
   if (status !== 0) throw new Error('Package installation failed. Check your internet connection and launch again.');
+}
+
+if (process.argv.includes('--check-environment')) {
+  const results = await checkEnvironment('ko');
+  console.log(formatReport(results, 'ko'));
+  if (results.some(result => result.status === 'error')) process.exit(1);
 }
 
 console.log('Starting local Studio…');
@@ -62,6 +71,8 @@ async function stop() {
   await server.close(); await rm(statusFile, { force: true }); process.exit(0);
 }
 process.on('SIGINT', () => { void stop(); }); process.on('SIGTERM', () => { void stop(); });
+// A macOS Terminal window sends SIGHUP when it closes.
+if (process.platform !== 'win32') process.on('SIGHUP', () => { void stop(); });
 if (process.env.STUDIO_LAUNCHER === '1') {
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', data => { if (data.includes('stop')) void stop(); });

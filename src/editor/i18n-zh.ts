@@ -74,7 +74,7 @@ export const workflowZh: typeof workflowEn = {
   jobFaceRegion: '请检查面部的FIELD拆分区域，横向和纵向半径必须大于零。',
   jobImageSize: '原图尺寸与项目设置不一致，请使用匹配的 source.png 和 rig.json。',
   jobMeshRegion: '请检查网格单元大小和精细网格矩形，单元大小应为正整数，矩形应具有宽度和高度。',
-  jobFailed: '本地工具未能完成操作，之前的图层已保留。', dependenciesHelp: '请安装 uv 和 Python 3.10 或更高版本后重试。安装说明见 docs/agent-guide.md。',
+  jobFailed: '本地工具未能完成操作，之前的图层已保留。', dependenciesHelp: '请安装 uv 和常规版 Python 3.10–3.13 后重试。Python 安装：uv python install 3.12。安装说明见 docs/agent-guide.md。',
   unsafeFilesHelp: '项目中包含指向其他位置的文件。请改用此项目内的普通文件后重试。', showLog: '查看日志', operationBusy: '正在本地处理…', reloadFailed: '无法重新加载项目，当前视图仍保留。',
   variantsTitle: '表情差分', variantMissing: '暂无', variantsHelp: '为闭眼、说话以及生气、悲伤、惊讶的表情绘制不同的图片，可让动作更自然。',
   eyesClosed: '闭眼', eyesHalf: '半闭眼', eyesSmile: '笑眼', eyesSad: '悲伤的眼睛', eyesSurprise: '惊讶的眼睛', mouthA: '嘴型「あ」', mouthAHalf: '半张嘴「あ」', mouthI: '嘴型「い」', mouthO: '嘴型「お」', mouthAngry: '生气的嘴', mouthSad: '悲伤的嘴',

@@ -4,6 +4,7 @@
 import { execFile } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { PYTHON_SPEC } from './python-spec.mjs';
 
 export const MIN_NODE = [22, 17];
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -14,54 +15,60 @@ const text = {
     node: version => `Node.js ${version}`,
     nodeOld: version => `Node.js ${MIN_NODE.join('.')} or later is required (found ${version}). Install it from https://nodejs.org/`,
     packages: 'Packages installed',
-    packagesMissing: 'Packages are not installed. Run: npm install',
+    packagesMissing: 'Packages are not installed. Run: npm ci',
     uv: version => `uv ${version}`,
     uvMissing: 'uv was not found. The editor works without it, but rebuilding layers and creating avatars need it.\n  Install: https://docs.astral.sh/uv/getting-started/installation/',
     python: version => `Python ${version} (found by uv)`,
-    pythonMissing: 'uv found no Python 3.10 or later. The editor works, but rebuilding layers and creating avatars need it.\n  Install: uv python install 3.12',
+    pythonMissing: 'uv found no supported regular Python 3.10–3.13 build. The editor works, but rebuilding layers and creating avatars need it.\n  Install: uv python install 3.12',
     pythonSkipped: 'Python was not checked because uv is missing.',
-    pythonFreeThreaded: version => `uv picks the free-threaded Python ${version}. OpenCV has no ready-made package for it, so rebuilding layers can fail.\n  Install a regular build: uv python install 3.13`,
+    pythonFreeThreaded: version => `uv picks the free-threaded Python ${version}. OpenCV has no ready-made package for it, so rebuilding layers can fail.\n  Install a regular build: uv python install 3.12`,
+    pythonUnsupported: version => `Python ${version} is outside the supported 3.10–3.13 range. Install: uv python install 3.12`,
+    mac: 'macOS: double-click MeshAvatarStudio.command. Keep its terminal open; stop with Control+C or close the window.',
     chromium: 'Playwright Chromium',
     chromiumMissing: 'Playwright Chromium was not found. The editor and the Live page work as they are.\n  Creating avatars with an agent, or importing drawn eyes and mouths, needs it to render the motion review.\n  Install: npx playwright install chromium',
     failed: 'Fix the errors above before starting the editor.',
-    warned: 'You can start the editor with: npm run dev\nInstall the tools marked with a warning before creating avatars.',
-    passed: 'Everything is ready. Start the editor with: npm run dev',
+    warned: 'You can start the editor with: npm start\nInstall the tools marked with a warning before creating avatars.',
+    passed: 'Everything is ready. Start the editor with: npm start',
   },
   ja: {
     title: 'Mesh Avatar Studio の動作環境チェック',
     node: version => `Node.js ${version}`,
     nodeOld: version => `Node.js ${MIN_NODE.join('.')} 以降が必要です(現在 ${version})。https://nodejs.org/ からインストールしてください。`,
     packages: 'パッケージはインストール済みです',
-    packagesMissing: 'パッケージがインストールされていません。次を実行してください: npm install',
+    packagesMissing: 'パッケージがインストールされていません。次を実行してください: npm ci',
     uv: version => `uv ${version}`,
     uvMissing: 'uv が見つかりません。エディタはこのまま使えますが、レイヤーの作り直しとアバターの作成には必要です。\n  インストール: https://docs.astral.sh/uv/getting-started/installation/',
     python: version => `Python ${version}(uv で検出)`,
-    pythonMissing: 'uv から Python 3.10 以降が見つかりません。エディタは使えますが、レイヤーの作り直しとアバターの作成には必要です。\n  インストール: uv python install 3.12',
+    pythonMissing: 'uv から対応する通常版 Python 3.10〜3.13 が見つかりません。エディタは使えますが、レイヤーの作り直しとアバターの作成には必要です。\n  インストール: uv python install 3.12',
     pythonSkipped: 'uv がないため、Python は確認していません。',
-    pythonFreeThreaded: version => `uv がフリースレッド版の Python ${version} を選んでいます。OpenCV にはこの版向けのビルド済みパッケージがなく、レイヤーの作り直しに失敗することがあります。\n  通常版をインストール: uv python install 3.13`,
+    pythonFreeThreaded: version => `uv がフリースレッド版の Python ${version} を選んでいます。OpenCV にはこの版向けのビルド済みパッケージがなく、レイヤーの作り直しに失敗することがあります。\n  通常版をインストール: uv python install 3.12`,
+    pythonUnsupported: version => `Python ${version} は対応範囲 3.10〜3.13 の外です。インストール: uv python install 3.12`,
+    mac: 'macOS: MeshAvatarStudio.command をダブルクリック。ターミナルを開いたまま使い、Control+C またはウィンドウを閉じて終了します。',
     chromium: 'Playwright の Chromium',
     chromiumMissing: 'Playwright の Chromium が見つかりません。エディタと配信画面はこのまま使えます。\n  エージェントでアバターを作るときや、描き分け画像を取り込むときは、動きの確認(ポーズ画像の書き出し)に必要です。\n  インストール: npx playwright install chromium',
     failed: '上のエラーを解決してからエディタを起動してください。',
-    warned: 'エディタは次のコマンドで起動できます: npm run dev\nアバターを作る前に、警告の付いたツールをインストールしてください。',
-    passed: 'すべて揃っています。次のコマンドでエディタを起動できます: npm run dev',
+    warned: 'エディタは次のコマンドで起動できます: npm start\nアバターを作る前に、警告の付いたツールをインストールしてください。',
+    passed: 'すべて揃っています。次のコマンドでエディタを起動できます: npm start',
   },
   ko: {
     title: 'Mesh Avatar Studio 환경 점검',
     node: version => `Node.js ${version}`,
     nodeOld: version => `Node.js ${MIN_NODE.join('.')} 이상이 필요합니다(현재 ${version}). 설치: https://nodejs.org/`,
     packages: '패키지가 설치되어 있습니다',
-    packagesMissing: '패키지가 없습니다. 실행: npm install',
+    packagesMissing: '패키지가 없습니다. 실행: npm ci',
     uv: version => `uv ${version}`,
     uvMissing: 'uv가 없습니다. 편집기는 사용할 수 있지만 레이어 재생성과 아바타 제작에는 필요합니다.\n  설치: https://docs.astral.sh/uv/getting-started/installation/',
     python: version => `Python ${version} (uv로 확인)`,
-    pythonMissing: 'uv에서 Python 3.10 이상을 찾지 못했습니다. 편집기는 사용할 수 있지만 레이어 재생성과 아바타 제작에는 필요합니다.\n  설치: uv python install 3.12',
+    pythonMissing: 'uv에서 지원하는 일반 Python 3.10~3.13을 찾지 못했습니다. 편집기는 사용할 수 있지만 레이어 재생성과 아바타 제작에는 필요합니다.\n  설치: uv python install 3.12',
     pythonSkipped: 'uv가 없어 Python을 확인하지 않았습니다.',
-    pythonFreeThreaded: version => `uv가 자유 스레드 Python ${version}을 선택합니다. OpenCV 설치와 레이어 재생성이 실패할 수 있습니다.\n  일반 버전 설치: uv python install 3.13`,
+    pythonFreeThreaded: version => `uv가 자유 스레드 Python ${version}을 선택합니다. OpenCV 설치와 레이어 재생성이 실패할 수 있습니다.\n  일반 버전 설치: uv python install 3.12`,
+    pythonUnsupported: version => `Python ${version}은 지원 범위인 3.10~3.13에 포함되지 않습니다. 설치: uv python install 3.12`,
+    mac: 'macOS: MeshAvatarStudio.command를 더블클릭하세요. 사용 중에는 터미널을 유지하고 Control+C 또는 창 닫기로 종료하세요.',
     chromium: 'Playwright Chromium',
     chromiumMissing: 'Playwright Chromium이 없습니다. 편집기와 Live는 사용할 수 있습니다.\n  에이전트의 아바타 제작과 눈·입 그림 적용 후 포즈 검토에 필요합니다.\n  설치: npx playwright install chromium',
     failed: '편집기를 시작하기 전에 위 오류를 해결하세요.',
-    warned: '편집기 실행: npm run dev\n아바타를 만들기 전에 경고에 표시된 도구를 설치하세요.',
-    passed: '준비가 완료됐습니다. 편집기 실행: npm run dev',
+    warned: '편집기 실행: npm start\n아바타를 만들기 전에 경고에 표시된 도구를 설치하세요.',
+    passed: '준비가 완료됐습니다. 편집기 실행: npm start',
   },
 };
 
@@ -89,7 +96,7 @@ export const probes = {
   uv: async () => (await run('uv', ['--version']))?.replace(/^uv\s+/, '').split(' ')[0] ?? null,
   // Studio runs its tools with an interpreter uv finds, without downloading one.
   python: async () => {
-    const path = await run('uv', ['python', 'find', '>=3.10']);
+    const path = await run('uv', ['python', 'find', '--no-python-downloads', PYTHON_SPEC]);
     // A trailing "t" marks a free-threaded build, as in python3.14t.
     return path ? (await run(path, ['-c', "import platform, sysconfig; print(platform.python_version() + ('t' if sysconfig.get_config_var('Py_GIL_DISABLED') else ''))"])) ?? path : null;
   },
@@ -112,15 +119,16 @@ export async function checkEnvironment(lang, probe = probes) {
   const python = uv ? await probe.python() : null;
   if (!python) results.push({ id: 'python', status: 'warn', message: uv ? t.pythonMissing : t.pythonSkipped });
   else if (/^\d+\.\d+\.\d+t$/.test(python)) results.push({ id: 'python', status: 'warn', message: t.pythonFreeThreaded(python.slice(0, -1)) });
+  else if (!/^3\.(10|11|12|13)\.\d+$/.test(python)) results.push({ id: 'python', status: 'warn', message: t.pythonUnsupported(python) });
   else results.push({ id: 'python', status: 'ok', message: t.python(python) });
   results.push(await probe.chromium() ? { id: 'chromium', status: 'ok', message: t.chromium } : { id: 'chromium', status: 'warn', message: t.chromiumMissing });
   return results;
 }
 
-export function formatReport(results, lang) {
+export function formatReport(results, lang, platform = process.platform) {
   const t = text[lang], mark = { ok: '✓', warn: '⚠', error: '✗' };
   const summary = results.some(r => r.status === 'error') ? t.failed : results.some(r => r.status === 'warn') ? t.warned : t.passed;
-  return [t.title, '', ...results.map(r => `${mark[r.status]} ${r.message}`), '', summary].join('\n');
+  return [t.title, '', ...results.map(r => `${mark[r.status]} ${r.message}`), '', summary, ...(platform === 'darwin' ? [t.mac] : [])].join('\n');
 }
 
 // npx and npm run start this file through a link, so compare real paths.
