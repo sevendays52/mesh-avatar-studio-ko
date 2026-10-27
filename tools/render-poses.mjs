@@ -29,20 +29,21 @@ async function main() {
   const args = process.argv.slice(2);
   const blinkOnly = args.includes('--blink-only');
   const headAxisOnly = args.includes('--head-axis-only');
+  const cameraDirections = args.includes('--camera-directions');
   const values = {};
   const positional = [];
   for (let i = 0; i < args.length; i++) {
     if (['--rig', '--out'].includes(args[i])) {
       if (!args[i + 1] || args[i + 1].startsWith('--')) throw new Error(`${args[i]} requires a project-relative path`);
       values[args[i]] = args[++i];
-    } else if (!['--blink-only', '--head-axis-only'].includes(args[i])) positional.push(args[i]);
+    } else if (!['--blink-only', '--head-axis-only', '--camera-directions'].includes(args[i])) positional.push(args[i]);
   }
-  const usage = 'Usage: npm run render-poses -- <project> [--blink-only | --head-axis-only] [--rig rig.json] [--out review/path]';
+  const usage = 'Usage: npm run render-poses -- <project> [--blink-only | --head-axis-only | --camera-directions] [--rig rig.json] [--out review/path]';
   if (args.includes('--help')) {
     console.log(usage);
     return;
   }
-  if (positional.length !== 1 || (blinkOnly && headAxisOnly)) throw new Error(usage);
+  if (positional.length !== 1 || [blinkOnly, headAxisOnly, cameraDirections].filter(Boolean).length > 1) throw new Error(usage);
   const project = await realpath(resolve(positional[0]));
   if (outside(root, project)) throw new Error('project must stay inside the repository');
   const rigPath = await realpath(resolve(project, values['--rig'] ?? 'rig.json'));
@@ -68,6 +69,7 @@ async function main() {
     for (const x of [-30, 0, 30]) for (const y of [-20, 0, 20]) poses.push([`axis-x${x}-y${y}`, { angleX: x, angleY: y }]);
     for (const y of [-30, 30]) poses.push([`axis-x0-y${y}`, { angleX: 0, angleY: y }]);
   }
+  if (cameraDirections) poses.length = 0;
   const built = await realpath(resolve(project, 'built'));
   if (outside(project, built)) throw new Error('built folder must stay inside the project');
   const assets = {};
@@ -110,13 +112,14 @@ async function main() {
     // Only the local code server may be contacted; private images use data URLs.
     await page.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
     await page.goto(`${origin}/__pose_review__`);
-    const result = await page.evaluate(async ({ rig, assets, poses, blinkOnly, headAxisOnly }) => {
+    const result = await page.evaluate(async ({ rig, assets, poses, blinkOnly, headAxisOnly, cameraDirections }) => {
       const { createMeshAvatar, PARAMS } = await import('/packages/runtime/src/index.ts');
       const canvas = document.getElementById('avatar');
       const width = Math.ceil(rig.image.width * 1.2), height = Math.ceil(rig.image.height * 1.1);
       canvas.style.width = `${width}px`; canvas.style.height = `${height}px`;
       const defaults = Object.fromEntries(PARAMS.map(p => [p.id, p.def]));
       const pictures = [];
+      const cameraChecks = [];
       async function avatar() {
         const av = await createMeshAvatar(canvas, { rig, assets, manual: true, padTop: 0.1, padSide: 0.1 });
         av.setAutoIdle(false); av.setAutoMotion(false); av.setParameters(defaults);
@@ -137,6 +140,51 @@ async function main() {
         }
         av.destroy();
       }
+      if (cameraDirections) {
+        const { FacePose, intentionalPitch } = await import('/src/live/tracking.ts');
+        const { nearestHeadView } = await import('/packages/runtime/src/engine/pitch-views.js');
+        const multiply = (a, b) => Array.from({ length: 16 }, (_, i) => {
+          const row = i % 4, col = Math.floor(i / 4);
+          return [0, 1, 2, 3].reduce((sum, k) => sum + a[row + k * 4] * b[k + col * 4], 0);
+        });
+        const rotation = (yaw, pitch, roll) => {
+          const [y, p, r] = [yaw, pitch, roll].map(v => v * Math.PI / 180);
+          return multiply([Math.cos(y),0,-Math.sin(y),0,0,1,0,0,Math.sin(y),0,Math.cos(y),0,0,0,0,1],
+            multiply([1,0,0,0,0,Math.cos(p),Math.sin(p),0,0,-Math.sin(p),Math.cos(p),0,0,0,0,1],
+              [Math.cos(r),Math.sin(r),0,0,-Math.sin(r),Math.cos(r),0,0,0,0,1,0,0,0,0,1]));
+        };
+        const input = data => ({ faceLandmarks: [[]], facialTransformationMatrixes: [{ data }], faceBlendshapes: [{ categories: [] }] });
+        const nodes = [{ id: 'neutral', angleX: 0, angleY: 0 }, ...(rig.head.views ?? rig.head.pitch?.views?.map(v => ({ ...v, angleX: 0 })) ?? [])];
+        const av = await avatar(); av.setSwayGain(0);
+        for (const mirror of [false, true]) for (const camera of [[0,0,0], [15,-12,-25], [-20,15,25]]) {
+          const baseline = rotation(...camera), pose = new FacePose(); pose.update(input(baseline), 0); pose.calibrate(0);
+          for (const anchor of nodes) {
+            // Feed a known physical camera pose that should land on this authored
+            // angle. Mirroring reverses only yaw/roll; default Live nod gain is 2.
+            const yaw = anchor.angleX * (mirror ? -1 : 1);
+            // Account for the pitch dead zone for small/diagonal authored anchors.
+            let low = 0, high = 60;
+            for (let i = 0; i < 40; i++) {
+              const middle = (low + high) / 2;
+              if (intentionalPitch(middle, yaw) < Math.abs(anchor.angleY) / 2) low = middle; else high = middle;
+            }
+            const pitch = anchor.angleY === 0 ? 0 : -Math.sign(anchor.angleY) * (low + high) / 2;
+            const motion = rotation(yaw, pitch, 0);
+            pose.update(input(multiply(baseline, motion)), 100);
+            const p = pose.sample(100, 1, { mirror, sensitivity: 1, smoothing: 0, pitchSensitivity: 2 }).params;
+            const selected = nodes[nearestHeadView(nodes, p.angleX, p.angleY)].id;
+            if (selected !== anchor.id || Math.abs(p.angleX - anchor.angleX) > 1e-8 || Math.abs(p.angleY - anchor.angleY) > 1e-8 || Math.abs(p.angleZ) > 1e-8)
+              throw new Error(`Camera direction mismatch: ${anchor.id}, mirror=${mirror}, camera=${camera}: ${JSON.stringify(p)}`);
+            av.setParameters({ ...defaults, ...p }); av.advance(1, 60);
+            const captured = canvas.toDataURL();
+            av.setParameters({ ...defaults, ...p, angleX: anchor.angleX, angleY: anchor.angleY, angleZ: 0 }); av.advance(0);
+            if (canvas.toDataURL() !== captured) throw new Error(`Camera render differs from authored anchor: ${anchor.id}`);
+            const name = `camera-${mirror ? 'mirror' : 'direct'}-${camera.join('_')}-${anchor.id}`;
+            pictures.push([name, captured]); cameraChecks.push({ name, mirror, camera, physicalAngles: { yaw, pitch, roll: 0 }, selected, pixelsMatch: true, parameters: p });
+          }
+        }
+        av.destroy();
+      }
       for (const [name, values, expression] of blinkOnly ? [] : poses) {
         const av = await avatar();
         av.setParameters({ ...defaults, ...values });
@@ -144,7 +192,7 @@ async function main() {
         av.advance(1, 60);
         pictures.push([name, canvas.toDataURL()]); av.destroy();
       }
-      if (!blinkOnly && !headAxisOnly) {
+      if (!blinkOnly && !headAxisOnly && !cameraDirections) {
         const av = await avatar();
         av.setParameters({ ...defaults, angleX: 30 }); av.advance(0.2, 60);
         av.setParameters(defaults);
@@ -188,10 +236,10 @@ async function main() {
         ctx.fillStyle = '#dedfe5'; ctx.fillRect(x, y, 300, 30);
         ctx.fillStyle = '#171b23'; ctx.font = '16px sans-serif'; ctx.fillText(name, x + 8, y + 22);
       }
-      return { images: [...pictures, ...crops, ['contact-sheet', sheet.toDataURL()]], width, height, cropBounds: { eyes, mouth }, padTop: 0.1, padSide: 0.1 };
-    }, { rig, assets, poses, blinkOnly, headAxisOnly });
+      return { images: [...pictures, ...crops, ['contact-sheet', sheet.toDataURL()]], width, height, cropBounds: { eyes, mouth }, padTop: 0.1, padSide: 0.1, ...(cameraDirections && { cameraChecks }) };
+    }, { rig, assets, poses, blinkOnly, headAxisOnly, cameraDirections });
     if (browserErrors.length) throw new Error(browserErrors.join('\n'));
-    const review = resolve(project, values['--out'] ?? (blinkOnly ? 'review/blinks' : headAxisOnly ? 'review/head-axes' : 'review'));
+    const review = resolve(project, values['--out'] ?? (blinkOnly ? 'review/blinks' : headAxisOnly ? 'review/head-axes' : cameraDirections ? 'review/camera-directions' : 'review'));
     if (outside(project, review)) throw new Error('review folder must stay inside the project');
     // Resolve an existing ancestor before mkdir, so an output through a symlink
     // cannot create directories outside the private project tree.
@@ -205,7 +253,7 @@ async function main() {
     for (const [name, url] of result.images) await writeFile(resolve(review, `${name}.png`), Buffer.from(url.split(',')[1], 'base64'));
     const { images, ...metadata } = result;
     const frames = images.filter(([name]) => !name.endsWith('-eyes') && !name.endsWith('-mouth') && name !== 'contact-sheet');
-    await writeFile(resolve(review, 'poses.json'), JSON.stringify({ ...metadata, project: basename(project), fixedFps: 60, poseSeconds: blinkOnly ? 1 / 60 : 1, poses: blinkOnly ? frames.map(([name]) => ({ name })) : poses.map(([name, parameters, expression]) => ({ name, parameters, ...(expression && { expression }) })), hairFrames: blinkOnly || headAxisOnly ? 0 : 6, files: images.map(([name]) => `${name}.png`) }, null, 2) + '\n');
+    await writeFile(resolve(review, 'poses.json'), JSON.stringify({ ...metadata, project: basename(project), fixedFps: 60, poseSeconds: blinkOnly ? 1 / 60 : 1, poses: cameraDirections ? result.cameraChecks : blinkOnly ? frames.map(([name]) => ({ name })) : poses.map(([name, parameters, expression]) => ({ name, parameters, ...(expression && { expression }) })), hairFrames: blinkOnly || headAxisOnly || cameraDirections ? 0 : 6, files: images.map(([name]) => `${name}.png`) }, null, 2) + '\n');
     console.log(`Rendered ${frames.length} ${blinkOnly ? 'blink frames' : 'poses'}, eye/mouth crops and contact-sheet.png in ${relative(root, review)}/`);
   } finally {
     await browser?.close();

@@ -193,6 +193,31 @@ saved values. Open stream views for the same project follow changes; copied OBS 
 include the current zoom and position. For the closest crop match, use the same aspect ratio
 in Live and OBS. Lighting handles remain independently draggable.
 
+### Camera and authored head directions
+
+Head-view angles use the illustration's image coordinates: `angleX < 0` looks toward
+image-left, `angleX > 0` toward image-right, `angleY > 0` up and `angleY < 0` down.
+**Mirror** reverses camera yaw and roll, swaps the eyes and mirrors horizontal gaze;
+up/down stays the same. **Reverse head nod** reverses only up/down. These controls
+apply to every project; they do not change the authored drawings or their angles.
+
+Calibrate facing forward with relaxed eyes and a closed mouth after positioning the
+camera. The neutral rotation is removed before extracting yaw, pitch and roll, so a
+tilted camera does not turn a horizontal head movement into a nod. Small pitch drift
+is suppressed; nod sensitivity still controls how far a deliberate nod moves the avatar.
+
+To check a local project's registered head anchors with synthetic camera input:
+
+```sh
+npm run render-poses -- projects/<name> --camera-directions
+```
+
+This checks neutral and each authored anchor with both mirror settings and three
+camera orientations, then compares the rendered pixels against directly applying the
+authored angles. Images, a contact sheet and the numeric results stay under that
+project's `review/camera-directions/`. This checks the mapping and renderer; it does
+not measure the model's accuracy on a person's webcam or judge the drawing's perspective.
+
 ### Stream view URL
 
 | Parameter | Values | Default |

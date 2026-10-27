@@ -1,8 +1,55 @@
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { expect, test, vi } from 'vitest';
+import { FacePose, type FaceResult } from '../src/live/tracking';
 
 const source = readFileSync(new URL('../src/live/tracking-worker.js', import.meta.url), 'utf8');
+
+function eyePoints(width: number, height: number, roll: number, left: number, right: number) {
+  const points = Array.from({ length: 468 }, () => ({ x: .5, y: .5 }));
+  for (const [cx, ratio, indices] of [[.65, left, [362, 263, 385, 380, 386, 374]], [.35, right, [33, 133, 160, 144, 158, 153]]] as const) {
+    const positions = [[-20, 0], [20, 0], [-7, -20 * ratio], [-7, 20 * ratio], [7, -20 * ratio], [7, 20 * ratio]];
+    indices.forEach((id, i) => {
+      const [x, y] = positions[i];
+      points[id] = { x: cx + (x * Math.cos(roll) - y * Math.sin(roll)) / width,
+        y: .5 + (x * Math.sin(roll) + y * Math.cos(roll)) / height };
+    });
+  }
+  return points;
+}
+
+test.each([[640, 480, 0], [1280, 720, .6], [480, 640, Math.PI / 2]])('worker lid measurements reach full closure at %i×%i with roll %f', async (width, height, roll) => {
+  const raw = { faceLandmarks: [eyePoints(width, height, roll, .16, .3)],
+    faceBlendshapes: [{ categories: [{ categoryName: 'eyeBlinkLeft', score: .1 }, { categoryName: 'eyeBlinkRight', score: .1 }] }],
+    facialTransformationMatrixes: [{ data: [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1] }] };
+  const postMessage = vi.fn();
+  const scope = { exports: {}, postMessage, setInterval: vi.fn(), location: { href: 'http://127.0.0.1/mediapipe/tracking-worker.js' },
+    importScripts: () => { scope.exports = { FaceLandmarker: { createFromOptions: async () => ({ detectForVideo: () => raw }) }, FilesetResolver: { forVisionTasks: async () => ({}) } }; },
+    onmessage: async (_event: { data: Record<string, unknown> }) => {},
+  };
+  runInNewContext(source, { self: scope, performance: { now: () => 0 }, URL });
+  await scope.onmessage({ data: { type: 'init' } });
+  const pose = new FacePose(), options = { mirror: false, sensitivity: 1, smoothing: 1 };
+  const capture = async (timestamp: number, bitmap = false) => {
+    const frame = { ...(bitmap ? { width, height } : { displayWidth: width, displayHeight: height }), close: vi.fn() };
+    await scope.onmessage({ data: { type: 'frame', frame, timestamp } });
+    expect(frame.close).toHaveBeenCalledOnce();
+    const message = postMessage.mock.calls.filter(([m]) => m.type === 'result').at(-1)![0];
+    expect(message.result.faceLandmarks).toEqual([[]]);
+    return message.result as FaceResult;
+  };
+  const neutral = await capture(0);
+  expect(neutral.eyeAspectRatios?.Left).toBeCloseTo(.16);
+  expect(neutral.eyeAspectRatios?.Right).toBeCloseTo(.3);
+  pose.update(neutral, 0); expect(pose.calibrate(0)).toBe(true);
+  raw.faceLandmarks = [eyePoints(width, height, roll, .04, .3)]; raw.faceBlendshapes[0].categories[0].score = .4;
+  pose.update(await capture(33, true), 33);
+  expect(pose.sample(33, 1 / 60, options).params).toMatchObject({ eyeLOpen: 0, eyeROpen: 1 });
+  // A malformed eye must not become a zero-gap blink; the other eye remains usable.
+  raw.faceLandmarks[0][385].x = NaN;
+  expect((await capture(66)).eyeAspectRatios).toEqual({ Right: expect.closeTo(.3) });
+});
+
 test.each(['balanced', 'sensitive'])('worker %s profile returns compact full-frame bounds without raw landmarks', async profile => {
   const raw = { faceLandmarks: [[{ x: .1, y: .2 }, { x: .5, y: .7 }, { x: .3, y: .4 }]], faceBlendshapes: [], facialTransformationMatrixes: [] };
   const create = vi.fn(async () => ({ detectForVideo: () => raw })), postMessage = vi.fn();

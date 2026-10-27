@@ -12,7 +12,7 @@ test('eye and eyebrow gains strengthen weak expressions independently and keep c
   const face = readFace(result(12, { eyeBlinkLeft: .4, browInnerUp: .3, jawOpen: .25 }))!;
   const normal = mapFace(face, neutral, options);
   const strong = mapFace(face, neutral, { ...options, eyeSensitivity: 2, browSensitivity: 2 });
-  expect(normal.eyeLOpen).toBeCloseTo(.75); expect(strong.eyeLOpen).toBeCloseTo(.5);
+  expect(normal.eyeLOpen).toBeCloseTo(1 - .25 / .65); expect(strong.eyeLOpen).toBeCloseTo(1 - .5 / .65);
   expect(strong.browY).toBeCloseTo(normal.browY * 2);
   expect(strong.angleX).toBe(normal.angleX); expect(strong.mouthOpen).toBe(normal.mouthOpen);
   expect(strong.eyeROpen).toBe(1);
@@ -68,6 +68,82 @@ test('mirror flips horizontal pose and gaze, swaps eyes, and blink closes fully'
   expect(mirror.angleX).toBe(-normal.angleX); expect(mirror.gazeX).toBe(-normal.gazeX);
   const pose = new FacePose(); pose.update(result(0, { eyeBlinkLeft: 0.95 }), 0);
   expect(pose.sample(1, 1 / 60, { ...options, smoothing: 1 }).params.eyeLOpen).toBe(0);
+});
+test('moderate blink scores reach closed eyes while half blinks and calibrated rest stay distinct', () => {
+  const neutral = readFace(result(0, { eyeBlinkLeft: .2 }))!;
+  expect(mapFace(neutral, neutral, options).eyeLOpen).toBe(1);
+  const half = mapFace(readFace(result(0, { eyeBlinkLeft: .45 }))!, neutral, options);
+  expect(half.eyeLOpen).toBeGreaterThan(.3); expect(half.eyeLOpen).toBeLessThan(.75);
+  expect(mapFace(readFace(result(0, { eyeBlinkLeft: .72 }))!, neutral, options).eyeLOpen).toBe(0);
+  for (const eyeSensitivity of [.5, 1, 4]) {
+    expect(mapFace(readFace(result(0, { eyeBlinkLeft: .65 }))!, null, { ...options, eyeSensitivity }).eyeLOpen).toBe(0);
+  }
+  let previous = 1;
+  for (let blink = .2; blink <= 1; blink += .01) {
+    const value = mapFace(readFace(result(0, { eyeBlinkLeft: blink }))!, neutral, options).eyeLOpen;
+    expect(value).toBeLessThanOrEqual(previous); expect(value).toBeGreaterThanOrEqual(0); previous = value;
+  }
+});
+
+function withEyes(input: FaceResult, Left: number, Right: number): FaceResult {
+  return { ...input, eyeAspectRatios: { Left, Right } };
+}
+
+test('lid geometry recovers underestimated blinks per eye, including calibrated narrow eyes and mirror', () => {
+  const neutral = readFace(withEyes(result(0, { eyeBlinkLeft: .1, eyeBlinkRight: .1 }), .16, .3))!;
+  expect(mapFace(neutral, neutral, options)).toMatchObject({ eyeLOpen: 1, eyeROpen: 1 });
+  const closed = withEyes(result(0, { eyeBlinkLeft: .4, eyeBlinkRight: .1 }), .04, .3);
+  expect(mapFace(readFace(closed)!, neutral, options)).toMatchObject({ eyeLOpen: 0, eyeROpen: 1 });
+  expect(mapFace(readFace(closed)!, neutral, { ...options, mirror: true })).toMatchObject({ eyeLOpen: 1, eyeROpen: 0 });
+  const half = mapFace(readFace(withEyes(result(0, { eyeBlinkLeft: .3 }), .1, .3))!, neutral, options);
+  expect(half.eyeLOpen).toBeGreaterThan(.3); expect(half.eyeLOpen).toBeLessThan(.75);
+  // A fallback reference also works before pressing Calibrate.
+  expect(mapFace(readFace(withEyes(result(0, { eyeBlinkLeft: .4 }), .07, .28))!, null, options).eyeLOpen).toBe(0);
+});
+
+test('missing or invalid eye geometry falls back to scores and oblique poses cannot force a geometric blink', () => {
+  const input = result(0, { eyeBlinkLeft: .3 });
+  const expected = mapFace(readFace(input)!, null, options).eyeLOpen;
+  for (const ratio of [NaN, Infinity, -.1, 2]) {
+    expect(mapFace(readFace(withEyes(input, ratio, .3))!, null, options).eyeLOpen).toBe(expected);
+  }
+  // Narrow eyes alone, with no blink evidence, must stay open.
+  expect(mapFace(readFace(withEyes(result(), .05, .05))!, null, options)).toMatchObject({ eyeLOpen: 1, eyeROpen: 1 });
+  for (const [yaw, pitch] of [[45, 0], [0, 35]]) {
+    const turned = rotationInput(yaw, pitch, 0); turned.faceBlendshapes = input.faceBlendshapes;
+    expect(mapFace(readFace(withEyes(turned, .03, .3))!, null, options).eyeLOpen).toBe(expected);
+    turned.faceBlendshapes = result(0, { eyeBlinkLeft: .9 }).faceBlendshapes;
+    expect(mapFace(readFace(withEyes(turned, .03, .3))!, null, options).eyeLOpen).toBe(0);
+  }
+});
+
+test.each([30, 60, 120])('a weak one-frame blink survives maximum smoothing and reopens promptly at %i fps', fps => {
+  const pose = new FacePose(), settings = { ...options, smoothing: 1 }, dt = 1 / fps;
+  pose.update(withEyes(result(), .28, .28), 0); pose.calibrate(0); pose.sample(0, dt, settings);
+  pose.update(withEyes(result(0, { eyeBlinkLeft: .4 }), .07, .28), 33);
+  expect(pose.sample(33, dt, settings).params).toMatchObject({ eyeLOpen: 0, eyeROpen: 1 });
+  pose.update(withEyes(result(), .28, .28), 66);
+  let sample = pose.sample(66, dt, settings);
+  for (let i = 1; i < Math.ceil(.1 * fps); i++) sample = pose.sample(66 + i * 1000 / fps, dt, settings);
+  expect(sample.params.eyeLOpen).toBeGreaterThan(.95);
+});
+
+test('closed-eye hysteresis rejects threshold noise and clears on face loss, calibration and reset', () => {
+  const pose = new FacePose();
+  pose.update(result(0, { eyeBlinkLeft: .66 }), 0);
+  expect(pose.sample(0, .016, options).params.eyeLOpen).toBe(0);
+  pose.update(result(0, { eyeBlinkLeft: .63 }), 33);
+  expect(pose.sample(33, .016, options).params.eyeLOpen).toBe(0);
+  pose.update(result(0, { eyeBlinkLeft: .5 }), 66);
+  expect(pose.sample(66, .016, options).params.eyeLOpen).toBeGreaterThan(0);
+  pose.update(result(0, { eyeBlinkLeft: .66 }), 100); pose.sample(100, .016, options);
+  expect(pose.sample(601, .1, options).params.eyeLOpen).toBeGreaterThan(0);
+  pose.update(result(0, { eyeBlinkLeft: .63 }), 650);
+  expect(pose.sample(650, .016, options).params.eyeLOpen).toBeGreaterThan(0);
+  expect(pose.calibrate(650)).toBe(true);
+  expect(pose.sample(650, .016, options).params.eyeLOpen).toBe(1);
+  pose.reset(); pose.update(result(), 700);
+  expect(pose.sample(700, .016, options).params.eyeLOpen).toBe(1);
 });
 test('calibration normalizes relaxed eyes, mouth shapes, eyebrows and smile', () => {
   const neutral = readFace(result(0, { eyeBlinkLeft: 0.2, jawOpen: 0.1 }))!;
@@ -170,13 +246,39 @@ test('torso follows the head gradually and remains independent of cheek puff', (
   expect(later.bodyAngleX).toBeGreaterThan(5); expect(later.bodyAngleX).toBeLessThanOrEqual(6);
 });
 
-test('calibrated rotation separates a horizontal turn from an inclined neutral head', () => {
-  const neutral = readFace(rotationInput(0, 12, 8))!;
-  for (const yaw of [-50, -30, 0, 30, 50]) {
-    const face = readFace(rotationInput(yaw, 12, 8))!;
-    const angles = relativeFaceAngles(face, neutral);
-    expect(angles.yaw).toBeCloseTo(yaw, 10); expect(angles.pitch).toBeCloseTo(0, 10); expect(angles.roll).toBeCloseTo(0, 10);
-    expect(mapFace(face, neutral, { ...options, pitchSensitivity: 2 }).angleY).toBeCloseTo(0, 10);
+function cameraInput(neutral: FaceResult, motion: FaceResult) {
+  // Camera placement is a transform on the LEFT of head motion, not on its right.
+  const rotation = (input: FaceResult) => {
+    const m = input.facialTransformationMatrixes[0].data;
+    return [m[0], m[1], m[2], m[4], m[5], m[6], m[8], m[9], m[10]];
+  };
+  const a = multiply(rotation(neutral), rotation(motion));
+  return { ...motion, facialTransformationMatrixes: [{ data: [a[0],a[1],a[2],0,a[3],a[4],a[5],0,a[6],a[7],a[8],0,12,-8,-45,1] }] };
+}
+
+test.each([[0, 12, 8], [15, -12, -25], [-20, 15, 25]])('calibration removes camera yaw %i, pitch %i and roll %i before decomposing head motion', (y, p, r) => {
+  const baseline = rotationInput(y, p, r), neutral = readFace(baseline)!;
+  for (const [yaw, pitch, roll] of [[-50,0,0],[-30,0,0],[0,0,0],[30,0,0],[50,0,0],[0,-15,0],[0,15,0],[0,0,-20],[0,0,20],[25,-15,12],[-25,15,-12]]) {
+    const face = readFace(cameraInput(baseline, rotationInput(yaw, pitch, roll)))!;
+    expect(relativeFaceAngles(face, neutral).yaw).toBeCloseTo(yaw, 10);
+    expect(relativeFaceAngles(face, neutral).pitch).toBeCloseTo(pitch, 10);
+    expect(relativeFaceAngles(face, neutral).roll).toBeCloseTo(roll, 10);
+  }
+});
+
+test.each([false, true])('calibrated camera selects the authored four directions with mirror %s and tilt does not become a turn', mirror => {
+  const views = [{ id: 'neutral', angleX: 0, angleY: 0 }, { id: 'left', angleX: -30, angleY: 0 },
+    { id: 'right', angleX: 30, angleY: 0 }, { id: 'up', angleX: 0, angleY: 30 }, { id: 'down', angleX: 0, angleY: -30 }];
+  for (const camera of [[0,0,0], [15,-12,-25], [-20,15,25]]) {
+    const baseline = rotationInput(camera[0], camera[1], camera[2]), pose = new FacePose();
+    pose.update(baseline, 0); pose.calibrate(0);
+    for (const [yaw, pitch, roll, expected] of [[-30,0,0,mirror ? 'right' : 'left'],[30,0,0,mirror ? 'left' : 'right'],
+      [0,-15,0,'up'],[0,15,0,'down'],[0,0,20,'neutral'],[0,0,-20,'neutral'],[0,0,0,'neutral']] as const) {
+      pose.update(cameraInput(baseline, rotationInput(yaw, pitch, roll)), 100);
+      const parameters = pose.sample(100, 1, { ...options, mirror, pitchSensitivity: 2 }).params;
+      expect(views[nearestHeadView(views, parameters.angleX, parameters.angleY)].id).toBe(expected);
+      if (roll) expect(parameters.angleZ).toBeCloseTo(roll * (mirror ? -1 : 1));
+    }
   }
 });
 

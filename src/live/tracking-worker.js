@@ -12,6 +12,24 @@ function faceBounds(points) {
   const x = Math.min(...xs), y = Math.min(...ys), right = Math.max(...xs), bottom = Math.max(...ys);
   return { x, y, width: right - x, height: bottom - y };
 }
+function eyeAspectRatios(points, frame) {
+  const width = frame.displayWidth ?? frame.width, height = frame.displayHeight ?? frame.height;
+  if (!(width > 0 && height > 0)) return undefined;
+  const ratios = {};
+  // Anatomical sides, matching eyeBlinkLeft/Right. Measure the lid gap normal to
+  // the eye corners in pixels: normalized x/y alone distorts widescreen cameras.
+  for (const [side, indices] of [['Left', [362, 263, 385, 380, 386, 374]], ['Right', [33, 133, 160, 144, 158, 153]]]) {
+    const p = indices.map(i => points?.[i]);
+    if (!p.every(v => v && Number.isFinite(v.x) && Number.isFinite(v.y))) continue;
+    const dx = (p[1].x - p[0].x) * width, dy = (p[1].y - p[0].y) * height;
+    const span2 = dx * dx + dy * dy;
+    if (span2 < 16) continue;
+    const gap = (a, b) => Math.abs((a.x - b.x) * width * dy - (a.y - b.y) * height * dx);
+    const ratio = (gap(p[2], p[3]) + gap(p[4], p[5])) / (2 * span2);
+    if (Number.isFinite(ratio) && ratio <= 1) ratios[side] = ratio;
+  }
+  return Object.keys(ratios).length ? ratios : undefined;
+}
 self.onmessage = async ({ data }) => {
   if (data.type === 'init') {
     try {
@@ -35,9 +53,11 @@ self.onmessage = async ({ data }) => {
         lastFrame = data.timestamp;
         const start = performance.now(), result = tracker.detectForVideo(data.frame, now), elapsed = performance.now() - start;
         const bounds = faceBounds(result.faceLandmarks[0]);
+        const eyes = eyeAspectRatios(result.faceLandmarks[0], data.frame);
         self.postMessage({ type: 'result', elapsed, result: {
           faceLandmarks: result.faceLandmarks.length ? [[]] : [],
           ...(bounds && { faceBounds: bounds }),
+          ...(eyes && { eyeAspectRatios: eyes }),
           faceBlendshapes: result.faceBlendshapes,
           facialTransformationMatrixes: result.facialTransformationMatrixes,
         } });

@@ -140,7 +140,53 @@ test('camera shows uncropped bounds, mirrors the region, guides loss and reacqui
   await expect(region).toHaveCount(0); await expect(hint).toHaveCount(0); expect(outside).toEqual([]);
 });
 
-test('camera head nod changes the rendered avatar, calibrates and reverses independently of mirror', async ({ context, page }) => {
+test('camera weak blinks reach closed drawings, retain half eyes and relay mirrored winks', async ({ context, page }) => {
+  const outside = await guardNetwork(context); await syntheticMedia(page);
+  await context.route('**/mediapipe/vision_bundle.js', route => route.fulfill({ contentType: 'application/javascript', body: `
+    let mode = 'open'; const channel = new BroadcastChannel('test-eye-closure'); channel.onmessage = e => { mode = e.data; };
+    self.exports.FilesetResolver = { forVisionTasks: async () => ({}) };
+    self.exports.FaceLandmarker = { createFromOptions: async () => ({ detectForVideo() {
+      const points = Array.from({ length: 468 }, () => ({ x: .5, y: .5 }));
+      const closed = mode === 'closed' || mode === 'wink', half = mode === 'half';
+      for (const [cx, ratio, indices] of [[.65, closed ? .04 : half ? .1 : .16, [362,263,385,380,386,374]],
+        [.35, mode === 'closed' ? .06 : half ? .19 : .3, [33,133,160,144,158,153]]]) {
+        const positions = [[-20,0],[20,0],[-7,-20*ratio],[-7,20*ratio],[7,-20*ratio],[7,20*ratio]];
+        indices.forEach((id, i) => { points[id] = { x: cx + positions[i][0]/640, y: .5 + positions[i][1]/480 }; });
+      }
+      return { faceLandmarks: [points], facialTransformationMatrixes: [{data:[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]}],
+        faceBlendshapes: [{categories:[{categoryName:'eyeBlinkLeft',score:closed ? .4 : half ? .3 : .1},
+          {categoryName:'eyeBlinkRight',score:mode === 'closed' ? .4 : half ? .3 : .1}]}] };
+    } }) };` }));
+  await ready(page, '/live.html?idle=0');
+  const stream = await context.newPage(); await ready(stream, '/stream.html?idle=0');
+  await page.evaluate(async () => {
+    const path = '/src/live/relay.ts'; const { receiveLiveParameters } = await import(path);
+    receiveLiveParameters((data: { params: Record<string, number> }) => {
+      document.body.dataset.eyeLeft = String(data.params.eyeLOpen); document.body.dataset.eyeRight = String(data.params.eyeROpen);
+    });
+  });
+  const eyes = () => page.locator('body').evaluate(el => [Number(el.dataset.eyeLeft), Number(el.dataset.eyeRight)]);
+  const send = (mode: string) => page.evaluate(mode => { const channel = new BroadcastChannel('test-eye-closure'); channel.postMessage(mode); channel.close(); }, mode);
+  await page.getByRole('checkbox', { name: 'Mirror', exact: true }).uncheck();
+  await page.getByRole('slider', { name: 'Smoothing', exact: true }).fill('1');
+  await page.getByRole('button', { name: 'Start camera', exact: true }).click();
+  await expect(page.getByTestId('tracking-status')).toHaveAttribute('data-state', 'tracking');
+  await page.getByRole('button', { name: 'Calibrate', exact: true }).click();
+  await expect.poll(eyes).toEqual([1, 1]);
+  await expect(stream.locator('#avatar')).toHaveAttribute('data-live', 'active');
+  await send('half');
+  await expect.poll(async () => (await eyes()).every(v => v > .3 && v < .75)).toBe(true);
+  const half = createHash('sha256').update(await stream.locator('canvas').screenshot()).digest('hex');
+  await send('closed'); await expect.poll(eyes).toEqual([0, 0]);
+  expect(createHash('sha256').update(await stream.locator('canvas').screenshot()).digest('hex')).not.toBe(half);
+  await send('wink'); await expect.poll(async () => { const [l, r] = await eyes(); return l === 0 && r > .95; }).toBe(true);
+  await page.getByRole('checkbox', { name: 'Mirror', exact: true }).check();
+  await expect.poll(async () => { const [l, r] = await eyes(); return l > .95 && r === 0; }).toBe(true);
+  await send('open'); await expect.poll(async () => (await eyes()).every(v => v > .95)).toBe(true);
+  expect(outside).toEqual([]);
+});
+
+test('tilted camera calibrates all head directions, renders them and reverses pitch independently of mirror', async ({ context, page }) => {
   const outside = await guardNetwork(context); await syntheticMedia(page);
   await context.route('**/mediapipe/vision_bundle.js', route => route.fulfill({ contentType: 'application/javascript', body: `
     let pitch = 0, yaw = 0; const channel = new BroadcastChannel('test-head-nod'); channel.onmessage = e => { pitch = e.data.pitch; yaw = e.data.yaw; };
@@ -148,7 +194,14 @@ test('camera head nod changes the rendered avatar, calibrates and reverses indep
     self.exports.FaceLandmarker = { createFromOptions: async () => ({ close() { channel.close(); }, detectForVideo() {
       const a = pitch * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
       const b = yaw * Math.PI / 180, cy = Math.cos(b), sy = Math.sin(b);
-      return { faceLandmarks: [[]], facialTransformationMatrixes: [{ data: [cy,0,-sy,0,sy*s,c,cy*s,0,sy*c,-s,cy*c,0,0,0,0,1] }], faceBlendshapes: [{ categories: [] }] };
+      const tilt = 25 * Math.PI / 180, ct = Math.cos(tilt), st = Math.sin(tilt);
+      const camera = [ct,st,0,0,-st,ct,0,0,0,0,1,0,0,0,0,1];
+      const head = [cy,0,-sy,0,sy*s,c,cy*s,0,sy*c,-s,cy*c,0,0,0,0,1];
+      const data = Array.from({length:16}, (_, i) => {
+        const row = i % 4, col = Math.floor(i / 4);
+        return [0,1,2,3].reduce((sum,k) => sum + camera[row+k*4] * head[k+col*4], 0);
+      });
+      return { faceLandmarks: [[]], facialTransformationMatrixes: [{ data }], faceBlendshapes: [{ categories: [] }] };
     } }) };` }));
   await ready(page, '/live.html?idle=0');
   await page.getByRole('button', { name: 'Face', exact: true }).click();
@@ -163,8 +216,23 @@ test('camera head nod changes the rendered avatar, calibrates and reverses indep
     const path = '/src/live/relay.ts'; const { receiveLiveParameters } = await import(path);
     return new Promise<number>(resolve => { const off = receiveLiveParameters((data: { params: Record<string, number> }) => { off(); resolve(Math.abs(data.params.angleX)); }); });
   });
+  const nextAngles = () => page.evaluate(async () => {
+    const path = '/src/live/relay.ts'; const { receiveLiveParameters } = await import(path);
+    return new Promise<number[]>(resolve => { const off = receiveLiveParameters((data: { params: Record<string, number> }) => {
+      off(); resolve([data.params.angleX, data.params.angleY, data.params.angleZ]);
+    }); });
+  });
   const send = (pitch: number, yaw = 0) => page.evaluate(value => { const channel = new BroadcastChannel('test-head-nod'); channel.postMessage(value); channel.close(); }, { pitch, yaw });
   const canvas = page.getByTestId('live-avatar'), hash = async () => createHash('sha256').update(await canvas.screenshot()).digest('hex');
+  for (const mirror of [true, false]) {
+    await page.getByRole('checkbox', { name: 'Mirror', exact: true }).setChecked(mirror);
+    for (const [pitch, yaw, expectedX, expectedY] of [[0,-30,mirror ? 30 : -30,0], [0,30,mirror ? -30 : 30,0], [-15,0,0,30], [15,0,0,-30]]) {
+      await send(pitch, yaw);
+      await expect.poll(async () => {
+        const [x,y,z] = await nextAngles(); return Math.abs(x-expectedX) < 1 && Math.abs(y-expectedY) < 1 && Math.abs(z) < 1;
+      }).toBe(true);
+    }
+  }
   await send(3, 30); await expect.poll(nextYaw).toBeGreaterThan(25);
   await expect.poll(async () => Math.abs(await nextPitch())).toBeLessThan(0.5);
   await send(10); await expect.poll(nextPitch).toBeLessThan(-15); const down = await hash();
