@@ -7,6 +7,13 @@ that the editor can open and that animates cleanly; the person then fine-tunes i
 Work through the steps in order. Each step ends with a check. Do not skip the checks: the
 quality of the result depends on looking at your own output and correcting it.
 
+For Codex, start with `npm run authoring -- status projects/<name>` and
+[authoring-workflow.md](authoring-workflow.md). Its local commands bundle the steps
+below, track changed inputs/outputs and prepare review grids/sheets. Read this guide
+by the indicated stage; keep the order and visual checks. Existing artwork is never
+automatically treated as reviewed, and unchanged receipts never waive calibration
+on a new model/setup or image-transfer consent.
+
 ## Before you start
 
 ### Tools
