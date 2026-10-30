@@ -75,6 +75,9 @@ jobs:
       - name: Test head view tools
         run: uv run tools/test_head_views.py
 
+      - name: Test authoring review tools
+        run: uv run tools/test_authoring_review.py
+
   macos-launcher:
     runs-on: macos-latest
     steps:
