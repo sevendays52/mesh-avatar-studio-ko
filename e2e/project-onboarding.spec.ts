@@ -24,7 +24,8 @@ test('launcher home creates an image-only project, copies its exact handoff, reo
   await handoff.getByRole('button', { name: 'Codex 요청문 복사', exact: true }).click();
   const prompt = await page.evaluate(() => navigator.clipboard.readText());
   for (const text of [`projects/${name}/source.png`, '--in-place', '좌표 교정', '확대 격자', '오버레이', '다른 프로젝트를 만들지 마세요',
-    'docs/codex-authoring.md', 'imagegen', '상하좌우 고개', 'head-views.py pack', '요청문 복사는 동의가 아닙니다']) expect(prompt).toContain(text);
+    'docs/codex-authoring.md', 'imagegen', '상하좌우 고개', 'head-views.py pack', '요청문 복사는 동의가 아닙니다',
+    'npm run authoring -- status', 'docs/authoring-workflow.md', '기본 39장']) expect(prompt).toContain(text);
   expect(await readFile(resolve('projects', name, 'source.png'))).toEqual(await readFile('samples/miko-qipao/source.png'));
   await page.reload(); await expect(hub).toBeVisible();
   await page.getByTestId(`hub-project-${name}`).click(); await expect(handoff).toBeVisible();

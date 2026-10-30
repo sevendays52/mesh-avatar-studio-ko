@@ -26,6 +26,7 @@ import { readRecent, addRecent, saveRecent, REOPEN_KEY, pickDirectory, hasDirect
 import './style.css';
 import { liveText } from '../live/i18n';
 import { ProjectHub } from './ProjectHub';
+import { AuthoringStatus } from './AuthoringStatus';
 import { projectFlowText } from './project-flow-i18n';
 
 type EditorError = { kind: 'invalidRig' | 'invalidFolder' | 'missingFolderFiles' | 'unreadableFolder' | 'unreadableProject' | 'invalidValue' | 'saveError' | 'revealError' | 'copyError' | 'continueError'; paths: string[] };
@@ -474,6 +475,7 @@ function Workspace() {
       </section>}
       <div className="right-column">
         <Preview key={localProject?.name ?? (pickedName || 'sample-miko-qipao')} projectKey={localProject?.name ?? (pickedName || 'sample-miko-qipao')} rig={rig} assets={assets} hasMouthSprites={mouthSprites} onDrawMouth={playbackOnly ? undefined : () => setMouthRequest(value => value + 1)} />
+        {!playbackOnly && localProject && !localProject.readOnly && <AuthoringStatus key={localProject.name} name={localProject.name} projectPath={localProject.relativePath} />}
         {!playbackOnly && <VariantsPanel project={localProject} projectPath={localProject?.relativePath ?? (pickedName ? `<${pickedName}>` : 'samples/miko-qipao')} assets={assets} rootPath={rootPath} busy={busy || saving} stale={changed.length > 0} onRun={runJob} mouthRequest={mouthRequest} onMouthPresence={setMouthSprites} />}
         {!localProject && !pickedName && <details className="panel new-illustration"><summary>{t.newIllustration}</summary><AskAgent newProject rootPath={rootPath} /></details>}
         {!playbackOnly && <aside className="panel inspector" inert={busy}>

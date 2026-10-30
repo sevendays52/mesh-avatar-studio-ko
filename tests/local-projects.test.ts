@@ -66,6 +66,20 @@ test('lists eligible projects and the read-only installed sample, and serves pro
   expect((await call('/__studio/projects/nova/rig.json.bak')).status).toBe(404);
 });
 
+test('authoring progress is read-only and does not expose private images or infer consent', async () => {
+  const response = await call('/__studio/projects/nova/authoring');
+  expect(response.status).toBe(200);
+  const progress = JSON.parse(response.body);
+  expect(progress).toMatchObject({ requiredDrawings: 39, complete: false, next: { action: 'build', view: 'neutral' } });
+  expect(progress.consent).toContain('not consent');
+  expect(response.body).not.toContain('synthetic image bytes');
+  expect(response.body).not.toContain(root);
+  expect((await call('/__studio/projects/sample-miko-qipao/authoring')).status).toBe(403);
+  await mkdir(resolve(root, 'projects/nova/.authoring'));
+  await writeFile(resolve(root, 'projects/nova/.authoring/state.json'), '{invalid');
+  expect((await call('/__studio/projects/nova/authoring')).status).toBe(422);
+});
+
 test('rejects raw and encoded traversal, absolute paths, malformed encoding and symlink escapes', async () => {
   for (const tail of ['../rig.json', './rig.json', '%2e%2e/rig.json', '%2Fprivate/rig.json', 'nova%2F..%2Fother/rig.json', 'nova%5Cother/rig.json', '%252e%252e/rig.json', 'C%3A/rig.json', '%/rig.json', 'nova/built/../../rig.json']) {
     expect((await call(`/__studio/projects/${tail}`)).status, tail).toBe(400);

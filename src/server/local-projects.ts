@@ -12,6 +12,7 @@ import { checkEntryName } from '../../packages/runtime/src/format/zip';
 import type { LocalProject, LocalProjectEntry } from '../project-types';
 import { decodeVariants, JobError, projectJob, runTool, variantState, VARIANTS, type Runner } from './project-jobs';
 import { createImageProject, ProjectCreateError } from './create-project';
+import { readAuthoringStatus } from '../../tools/authoring-state.mjs';
 
 const SAMPLE = 'sample-miko-qipao';
 const displayPath = (path: string) => path === homedir() ? '~' : path.startsWith(`${homedir()}${sep}`) ? `~${path.slice(homedir().length)}` : path;
@@ -295,6 +296,15 @@ export function localProjectMiddleware(root: string, reveal = revealFolder, runn
       if (parts.length < 3) throw new HttpError(404, 'Not found.');
       errorPath = parts[1] === SAMPLE ? 'samples/miko-qipao' : `projects/${parts[1]}`;
       const name = parts[1], path = await folder(name), tail = parts.slice(2);
+      if (req.method === 'GET' && tail.length === 1 && tail[0] === 'authoring') {
+        if (name === SAMPLE) throw new HttpError(403, 'The sample is read-only.');
+        try { json(200, await readAuthoringStatus(root, path)); }
+        catch (error) {
+          if ((error as NodeJS.ErrnoException).code) throw error;
+          throw new HttpError(422, 'Authoring status is unavailable. Inspect the local project state; existing artwork has been preserved.');
+        }
+        return;
+      }
       if (req.method === 'POST' && tail.length === 1 && tail[0] === 'reveal') {
         await reveal(path); json(200, { path }); return;
       }

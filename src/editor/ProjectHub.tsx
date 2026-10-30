@@ -4,6 +4,7 @@ import { createImageProject, CreateImageProjectError, localProjects } from './pr
 import { useI18n } from './i18n';
 import { projectFlowText } from './project-flow-i18n';
 import { CopyButton } from './CopyButton';
+import { AuthoringStatus } from './AuthoringStatus';
 
 export function ProjectHub({ projects, rootPath, pending, onSelect, onCreated, onProjects, onBack, onEditor, opening }: {
   projects: LocalProjectEntry[] | null; rootPath?: string; pending: LocalProject | null;
@@ -42,6 +43,7 @@ export function ProjectHub({ projects, rootPath, pending, onSelect, onCreated, o
           <label className="handoff-prompt">{t.request}<textarea readOnly value={prompt} rows={8} /></label>
           <CopyButton value={prompt} label={t.request} />
           <p role="status">{ready ? t.completed : t.waiting}</p>
+          <AuthoringStatus key={pending.name} name={pending.name} projectPath={pending.relativePath} />
           {refreshError && <p role="alert" className="error">{t.checkFailed}</p>}
           <div className="hub-actions"><button onClick={() => { void refresh(); }}>{t.refresh}</button><button className="primary" disabled={!ready || opening} onClick={() => { if (ready) onSelect(current); }}>{opening ? t.checking : t.open}</button></div>
         </div>

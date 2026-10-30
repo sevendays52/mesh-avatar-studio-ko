@@ -13,7 +13,7 @@ const en = {
   steps: ['Open Codex in this repository folder.', 'Copy the request below and paste it into Codex.', 'Keep this page open. When Codex finishes, open the prepared avatar.'],
   request: 'Copy Codex request', folder: 'Copy repository folder', source: 'Original illustration', waiting: 'Waiting for rig and layers', completed: 'Avatar files are ready',
   open: 'Open avatar', checking: 'Checking project…', checkFailed: 'Could not refresh projects. Check that the launcher is running and try again.',
-  prompt: 'Continue the existing project PROJECT using PROJECT/source.png. The browser has already saved the source image and avatar.json. Keep this same project folder and preserve source.png; do not create another project. Follow docs/agent-guide.md in order: perform coordinate calibration, then initialize the draft with `uv run tools/new-project.py PROJECT/source.png NAME --in-place` only if no rig.draft.json or rig.json exists. Use zoomed grids and overlays, validate the draft, build the layers and visually inspect every review pose. Keep all images and derivatives under this project. Ask before sending images to an external generator unless permission has already been explicitly granted in this conversation. Report remaining defects and tell me when I can open this project from Studio.',
+  prompt: "Continue PROJECT from PROJECT/source.png; preserve this project and original. First run `npm run authoring -- status PROJECT` and follow docs/authoring-workflow.md. Follow docs/agent-guide.md in order: coordinate calibration, zoomed grids, overlays; initialize with --in-place only if no rig or existing assets exist. Complete the 39 drawings in docs/codex-authoring.md using imagegen edits: eyes/mouths, up/down/left/right heads and per-view eyes/mouths; register with tools/head-views.py pack. Review each head before its expressions and visually inspect all required poses. Explain the full set and ask once before image transfer; copying this request is not consent. Preserve custom masks and accepted art. If unavailable or declined, report drawings as pending. Report remaining defects and when Studio can open the project.",
 };
 type FlowText = Omit<typeof en, 'steps'> & { steps: string[] };
 const ko: FlowText = {
@@ -31,7 +31,7 @@ const ko: FlowText = {
   steps: ['이 저장소 폴더에서 Codex를 여세요.', '아래 요청을 복사해 Codex에 붙여 넣으세요.', '이 페이지를 열어 두세요. Codex 작업이 끝나면 완성된 아바타를 열 수 있습니다.'],
   request: 'Codex 요청문 복사', folder: '저장소 폴더 경로 복사', source: '원본 일러스트', waiting: '리그·레이어 제작 대기 중', completed: '아바타 파일이 준비됐습니다',
   open: '완성된 아바타 열기', checking: '프로젝트 확인 중…', checkFailed: '목록을 새로고침하지 못했습니다. 실행파일이 켜져 있는지 확인하고 다시 시도하세요.',
-  prompt: '기존 프로젝트 PROJECT에서 PROJECT/source.png로 아바타 제작을 이어서 진행해 주세요. 브라우저에서 source.png와 avatar.json을 이미 저장했습니다. 이 폴더와 원본 이미지를 유지하고 다른 프로젝트를 만들지 마세요. docs/agent-guide.md를 순서대로 따라 좌표 교정을 먼저 수행하세요. rig.draft.json과 rig.json이 모두 없을 때만 `uv run tools/new-project.py PROJECT/source.png NAME --in-place`로 초안을 초기화하세요. 확대 격자와 오버레이로 좌표를 검토하고, 리그 검증·레이어 빌드·모든 포즈 이미지 육안 검토까지 진행하세요. 이미지와 모든 파생물은 이 프로젝트 안에 보관하세요. 이 대화에서 명시적으로 허용하지 않았다면 외부 이미지 생성에 보내기 전에 동의를 받으세요. 남은 결함을 보고하고 Studio에서 이 프로젝트를 열 수 있게 되면 알려 주세요.',
+  prompt: "기존 PROJECT/source.png로 이어가고 원본을 유지하세요. 다른 프로젝트를 만들지 마세요. 먼저 `npm run authoring -- status PROJECT`와 docs/authoring-workflow.md를 따르세요. docs/agent-guide.md 순서대로 좌표 교정·확대 격자·오버레이를 검토하고, 기존 리그나 산출물이 없을 때만 --in-place로 초기화하세요. docs/codex-authoring.md의 기본 39장(눈·입, 상하좌우 고개 및 고개별 눈·입)을 imagegen 편집으로 만들고 tools/head-views.py pack으로 등록하세요. 각 고개를 먼저 검토·확정한 후 눈·입을 제작하고 모든 필수 포즈를 육안 검토하세요. 전송할 세트를 설명하고 동의를 한 번에 받으세요. 요청문 복사는 동의가 아닙니다. 기존 원화·보정 마스크는 보존하고 변경된 단계만 갱신하세요. 생성 불가·미동의라면 원화가 미완성임을 알리세요. 남은 결함과 Studio에서 열 수 있는지 보고하세요.",
 };
 const ja: FlowText = {
   home: 'プロジェクト選択', title: 'アバターのプロジェクトを選ぶ', intro: '既存のアバター、サンプル、または新しいイラストから始めます。',
@@ -48,7 +48,7 @@ const ja: FlowText = {
   steps: ['このリポジトリのフォルダで Codex を開きます。', '下の依頼文をコピーして Codex に貼り付けます。', 'このページを開いたままにし、制作完了後にアバターを開きます。'],
   request: 'Codex の依頼文をコピー', folder: 'リポジトリの場所をコピー', source: '元のイラスト', waiting: 'リグとレイヤーの制作待ち', completed: 'アバターの準備ができました',
   open: '完成したアバターを開く', checking: '確認中…', checkFailed: '一覧を更新できません。起動アプリが動いているか確認してください。',
-  prompt: '既存の PROJECT で PROJECT/source.png からアバターを制作してください。ブラウザで source.png と avatar.json は保存済みです。同じフォルダと元画像を維持し、別のプロジェクトは作らないでください。docs/agent-guide.md の順に座標校正から始め、rig.draft.json と rig.json が両方ない場合だけ `uv run tools/new-project.py PROJECT/source.png NAME --in-place` で初期化してください。拡大格子、オーバーレイ、リグ検証、レイヤー生成、全ポーズ画像の目視確認まで行ってください。画像と派生物はこのプロジェクト内に保存し、この会話で明示的な許可がない場合は外部画像生成に送る前に許可を得てください。残った問題と Studio で開けるようになったことを報告してください。',
+  prompt: "PROJECT/source.png から既存の制作を続け、元画像と同じプロジェクトを保持してください。まず `npm run authoring -- status PROJECT` と docs/authoring-workflow.md に従ってください。docs/agent-guide.md の座標校正・拡大格子・オーバーレイを順に確認し、既存リグや成果物がない場合だけ --in-place で初期化します。docs/codex-authoring.md の原画39枚を imagegen 編集で制作し、各頭部を確認してから専用の目・口を制作、tools/head-views.py pack で登録し、全ポーズを目視確認してください。送信するセットを説明し一度許可を得てください。依頼文のコピーは同意ではありません。既存原画・補正マスクを保持し変更部分のみ更新します。生成不可・不許可なら原画を未完了と報告し、残る問題と Studio で開けるかを伝えてください。",
 };
 const zh: FlowText = {
   ...en,
@@ -62,8 +62,5 @@ const zh: FlowText = {
   steps: ['在仓库文件夹中打开 Codex。', '复制下方请求并粘贴到 Codex。', '保持本页打开，制作完成后打开虚拟形象。'],
   request: '复制 Codex 请求', folder: '复制仓库路径', source: '原始插画', waiting: '等待绑定和图层', completed: '文件已准备就绪', open: '打开虚拟形象', checking: '检查中…',
 };
-en.prompt += ' Complete the default drawn-avatar workflow in docs/codex-authoring.md: use imagegen edits for closed/half/smiling eyes, speaking mouths and up/down/left/right head drawings; rig each view and its own eye/mouth sprites, then register with tools/head-views.py pack. Prepare locally and ask once for consent covering this drawing set before transmission. A copied request is not consent. Do not stop at masks when generation is available and authorized; if unavailable or declined, report drawn assets as pending rather than calling the mesh preview complete.';
-ko.prompt += ' docs/codex-authoring.md의 기본 원화 제작 흐름까지 완료하세요. imagegen 편집으로 감은 눈·반감은 눈·웃는 눈, 발화 입 모양, 상하좌우 고개 원화를 만들고, 각 원화의 전용 리그와 눈·입 그림을 제작한 뒤 tools/head-views.py pack으로 등록하세요. 먼저 로컬 요청을 준비하고, 이 그림 세트의 이미지 전송 동의를 한 번에 받으세요. 요청문 복사는 동의가 아닙니다. 생성 가능하고 허용됐다면 마스크 준비에서 멈추지 말고 실제 생성·적용·검토까지 진행하세요. 도구가 없거나 거절됐다면 원화가 미완성임을 알리고 메쉬 미리보기를 완성본으로 보고하지 마세요.';
-ja.prompt += ' docs/codex-authoring.md の標準制作を完了してください。imagegen 編集で閉眼・半眼・笑顔の目、発話の口、上下左右の頭部原画を制作し、各原画専用のリグと目・口画像を作って tools/head-views.py pack で登録します。送信前に画像セット全体の許可を一度得てください。依頼文のコピーは同意ではありません。生成可能かつ許可済みならマスク準備だけで止まらず、生成・適用・目視確認まで進めます。生成できない場合は原画が未完成と報告してください。';
 zh.prompt = en.prompt;
 export const projectFlowText = { en, ko, ja, zh };

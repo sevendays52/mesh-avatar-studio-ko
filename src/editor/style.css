@@ -54,6 +54,9 @@ button.primary:hover { color: white; background: #1d4ed8; }
 .handoff-prompt { margin: 24px 0 12px; }
 .handoff-prompt textarea { resize: vertical; width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 12px; font: inherit; font-weight: 400; line-height: 1.7; color: var(--ink); }
 .handoff-instructions > [role="status"] { margin-top: 24px; }
+.authoring-status { padding: 16px; overflow-wrap: anywhere; }
+.authoring-status ul { padding-left: 20px; line-height: 1.7; }
+.handoff-instructions .authoring-status { margin: 16px 0; }
 @media (max-width: 760px) { .handoff-grid { grid-template-columns: 1fr; } .project-hub { margin: 24px auto; } }
 .toolbar-divider { height: 24px; width: 1px; background: var(--line); }
 .live-link { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; background: var(--accent); color: white; font-weight: 600; text-decoration: none; white-space: nowrap; }
